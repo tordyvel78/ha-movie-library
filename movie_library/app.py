@@ -214,6 +214,7 @@ HTML = """
       cursor:pointer;
     }
     .iconbtn:hover{ border-color:#3336; }
+    .iconbtn.edit{ font-size:20px; }
     
     .modal{ display:none; }
     .modal.open{ display:block; }
@@ -262,20 +263,22 @@ HTML = """
   <div class="topbar">
     <div class="left">
       <input id="lib_search" class="search" placeholder="Sök i samlingen…" autocomplete="off">
+    </div>
+  
+    <div class="right" style="display:flex; gap:10px; align-items:center;">
       {% if manage_mode %}
         <a class="linkbtn" href="./">Tillbaka</a>
       {% else %}
-        <a class="linkbtn" href="manage">Hantera</a>
+        <a class="iconbtn edit" href="manage" aria-label="Hantera samling" title="Hantera samling" style="text-align:center; text-decoration:none; display:flex; align-items:center; justify-content:center;">
+          ✎
+        </a>
+  
+        <button type="button" class="iconbtn" onclick="openAddModal()" aria-label="Lägg till film" title="Lägg till film">
+          +
+        </button>
       {% endif %}
     </div>
-  
-    {% if not manage_mode %}
-    <button type="button" class="iconbtn" onclick="openAddModal()" aria-label="Lägg till film" title="Lägg till film">
-      +
-    </button>
-    {% endif %}
-  </div>
-  
+  </div>  
   
   <div id="search_hint" class="muted" style="margin-top:8px; display:none;"></div>
   
