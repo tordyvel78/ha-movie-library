@@ -3,6 +3,8 @@ import requests
 from flask import Flask, request, jsonify, render_template_string, redirect, url_for
 from time import time
 
+# this is a test
+
 app = Flask(__name__)
 DB_PATH = "/config/movies.db"
 
