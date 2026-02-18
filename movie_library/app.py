@@ -59,6 +59,7 @@ HTML = """
     <div class="row">
       <input id="title" name="title" placeholder="Titel" required value="{{prefill_title or ''}}">
       <input id="year" name="year" placeholder="År" type="number" min="1888" max="2100" value="{{prefill_year or ''}}">
+      <input type="hidden" id="tmdb_id" name="tmdb_id" value="">
     </div>
 
     <div class="row">
@@ -119,6 +120,7 @@ async function useTmdb(id) {
   const data = await res.json();
   if (!res.ok) return;
 
+  document.getElementById("tmdb_id").value = id;
   document.getElementById("title").value = data.title || "";
   document.getElementById("year").value = data.year || "";
   document.getElementById("tmdb_results").innerHTML = `<div class="muted">Vald: ${data.title} (${data.year||""})</div>`;
@@ -177,15 +179,44 @@ def add():
     title = request.form.get("title", "").strip()
     fmt = request.form.get("format", "").strip()
     year = request.form.get("year", "").strip()
+    tmdb_id = request.form.get("tmdb_id", "").strip()
+
     year_val = int(year) if year.isdigit() else None
+    tmdb_val = int(tmdb_id) if tmdb_id.isdigit() else None
 
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("INSERT INTO movies (title, format, year) VALUES (?, ?, ?)",
-              (title, fmt, year_val))
-    conn.commit()
+
+    try:
+        # Om tmdb_id finns: den är unik via index -> stoppar dublett
+        if tmdb_val is not None:
+            c.execute(
+                "INSERT INTO movies (title, format, year, tmdb_id) VALUES (?, ?, ?, ?)",
+                (title, fmt, year_val, tmdb_val)
+            )
+        else:
+            # Manuell: stoppa dublett via title+year+format-index
+            c.execute(
+                "INSERT INTO movies (title, format, year, tmdb_id) VALUES (?, ?, ?, NULL)",
+                (title, fmt, year_val)
+            )
+
+        conn.commit()
+    except sqlite3.IntegrityError:
+        # Dublett – gör inget och visa tillbaka sidan med fel
+        conn.close()
+        return render_template_string(
+            HTML,
+            movies=get_all_movies(),
+            error="Dublett: filmen finns redan i samlingen.",
+            prefill_title=title,
+            prefill_year=year_val,
+            prefill_format=fmt
+        )
+
     conn.close()
     return redirect(url_for("home"))
+
 
 @app.route("/tmdb/search")
 def tmdb_search():
