@@ -13,3 +13,11 @@
   ],
   "arch": ["aarch64", "armv7", "amd64"]
 }
+"options": {
+  "tmdb_token": "",
+  "tmdb_language": "sv-SE"
+},
+"schema": {
+  "tmdb_token": "str",
+  "tmdb_language": "str"
+}
