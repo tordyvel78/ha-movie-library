@@ -161,12 +161,6 @@ HTML = """
     
     .title { margin-top: 8px; font-weight: 700; font-size: 14px; line-height: 1.2; }
     .meta { margin-top: 6px; display:flex; justify-content: space-between; gap:8px; align-items: baseline; }
-    <form method="post"
-          action="/delete/{{m[0]}}"
-          onsubmit="return confirm('Ta bort {{m[1]}}?');"
-          style="margin-top:8px;">
-      <button type="submit" class="danger">Ta bort</button>
-    </form>
     .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; border:1px solid #3333; }
     
     .danger{
@@ -235,6 +229,12 @@ HTML = """
           <span class="badge">{{m[2]}}</span>
           <span class="muted">{{m[3] or ""}}</span>
         </div>
+        <form method="post"
+              action="/delete/{{m[0]}}"
+              onsubmit="return confirm('Ta bort {{m[1]}}?');"
+              style="margin-top:8px;">
+          <button type="submit" class="danger">Ta bort</button>
+        </form>        
       </div>
     {% endfor %}
   </div>
@@ -383,6 +383,32 @@ def get_all_movies():
     rows = c.fetchall()
     conn.close()
     return rows
+
+@app.route("/delete/<int:movie_id>", methods=["POST"])
+def delete_movie(movie_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    # Hämta ev posterfil för att kunna ta bort lokalt
+    c.execute("SELECT poster_file FROM movies WHERE id=?", (movie_id,))
+    row = c.fetchone()
+
+    c.execute("DELETE FROM movies WHERE id=?", (movie_id,))
+    conn.commit()
+    conn.close()
+
+    # Ta bort posterfil om den finns
+    if row and row[0]:
+        try:
+            posters_dir = Path("/config/movie_library/posters")
+            f = posters_dir / row[0]
+            if f.exists():
+                f.unlink()
+        except Exception:
+            pass
+
+    return redirect(url_for("home"))
+
 
 @app.route("/")
 def home():
@@ -561,28 +587,3 @@ if __name__ == "__main__":
     os.makedirs("/config", exist_ok=True)
     init_db()
     app.run(host="0.0.0.0", port=5000)
-
-@app.route("/delete/<int:movie_id>", methods=["POST"])
-def delete_movie(movie_id: int):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-
-    # Hämta ev posterfil för att kunna ta bort lokalt
-    c.execute("SELECT poster_file FROM movies WHERE id=?", (movie_id,))
-    row = c.fetchone()
-
-    c.execute("DELETE FROM movies WHERE id=?", (movie_id,))
-    conn.commit()
-    conn.close()
-
-    # Ta bort posterfil om den finns
-    if row and row[0]:
-        try:
-            posters_dir = Path("/config/movie_library/posters")
-            f = posters_dir / row[0]
-            if f.exists():
-                f.unlink()
-        except Exception:
-            pass
-
-    return redirect(url_for("home"))
