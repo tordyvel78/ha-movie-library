@@ -302,6 +302,68 @@ HTML = """
       }
     }
     
+    .section{
+      margin-top: 14px;
+      padding: 14px;
+      border-radius: 14px;
+      border:1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.03);
+    }
+    
+    .section-title{
+      font-weight:700;
+      font-size:14px;
+      letter-spacing:.4px;
+      text-transform:uppercase;
+      opacity:.7;
+      margin-bottom:10px;
+    }
+    
+    .tmdb-search-row{
+      display:flex;
+      gap:8px;
+    }
+    
+    .tmdb-search-row input{
+      flex:1;
+    }
+    
+    .manual{
+      margin-top:18px;
+      border-color: rgba(0,150,255,.15);
+      background: rgba(0,150,255,.04);
+    }
+    
+    .format-group{
+      display:flex;
+      gap:16px;
+      margin-top:6px;
+    }
+    
+    .chk{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      font-size:14px;
+    }
+    
+    .primary-btn{
+      margin-top:12px;
+      width:100%;
+      padding:10px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.15);
+      background:#2a3342;
+      color:#fff;
+      font-weight:600;
+      cursor:pointer;
+    }
+    
+    .primary-btn:hover{
+      border-color:#4a90ff;
+    }
+    
+    
   </style>
   
 </head>
@@ -347,25 +409,66 @@ HTML = """
       </div>
   
       <form method="post" action="add" onsubmit="return addMovie(this);">
-        <div class="row">
-          <input id="title" name="title" placeholder="Titel" required value="{{prefill_title or ''}}">
-          <input id="year" name="year" placeholder="År" type="number" min="1888" max="2100" value="{{prefill_year or ''}}">
-          <input type="hidden" id="tmdb_id" name="tmdb_id" value="">
+
+        <!-- ================= TMDB-SEKTION ================= -->
+        <div class="section">
+          <div class="section-title">Sök på TMDB</div>
+      
+          <div class="tmdb-search-row">
+            <input id="title"
+                   name="title"
+                   placeholder="Filmtitel…"
+                   autocomplete="off">
+      
+            <button type="button" onclick="tmdbSearch()">Sök</button>
+          </div>
+      
+          <div id="tmdb_results" class="results"></div>
         </div>
-    
-        <div class="row">
-          <select id="format" name="format" required>
-            {% for opt in ["Blu-ray","4K UHD","DVD"] %}
-              <option value="{{opt}}" {% if prefill_format==opt %}selected{% endif %}>{{opt}}</option>
-            {% endfor %}
-          </select>
-    
-          <button type="button" onclick="tmdbSearch()">Sök på TMDB</button>
+      
+      
+        <!-- ================= MANUELL SEKTION ================= -->
+        <div class="section manual">
+          <div class="section-title">Manuell inläggning</div>
+      
+          <div class="row">
+            <input name="title"
+                   placeholder="Titel"
+                   required>
+      
+            <input name="year"
+                   placeholder="År"
+                   type="number"
+                   min="1888"
+                   max="2100">
+          </div>
+      
+          <div class="format-group">
+            <label class="chk">
+              <input type="checkbox" name="format" value="Blu-ray" checked>
+              Blu-ray
+            </label>
+      
+            <label class="chk">
+              <input type="checkbox" name="format" value="4K UHD">
+              4K UHD
+            </label>
+      
+            <label class="chk">
+              <input type="checkbox" name="format" value="DVD">
+              DVD
+            </label>
+          </div>
+      
+          <input type="hidden" id="tmdb_id" name="tmdb_id">
+      
+          <button type="submit" class="primary-btn">
+            Lägg till manuellt
+          </button>
         </div>
-    
-        <div id="tmdb_results" class="results"></div>
-    
+      
       </form>
+      
     </div>
   </div>
   
@@ -874,7 +977,8 @@ def home():
 @app.route("/add", methods=["POST"])
 def add():
     title = request.form.get("title", "").strip()
-    fmt = request.form.get("format", "").strip()
+    formats = request.form.getlist("format")
+    fmt = ", ".join(formats) if formats else ""
     year = request.form.get("year", "").strip()
     tmdb_id = request.form.get("tmdb_id", "").strip()
 
