@@ -407,7 +407,7 @@ def delete_movie(movie_id: int):
         except Exception:
             pass
 
-    return redirect(url_for("home"))
+    return redirect(request.referrer or "../../")
 
 
 @app.route("/")
