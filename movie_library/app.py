@@ -119,6 +119,7 @@ HTML = """
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Movie Library</title>
+  
   <style>
     body { font-family: system-ui, sans-serif; margin: 16px; }
     form { display: grid; gap: 10px; max-width: 520px; }
@@ -142,21 +143,48 @@ HTML = """
     .posterwrap { position: relative; }
     .posterwrap img { width: 100%; border-radius: 10px; display:block; }
     .poster_placeholder { width:100%; aspect-ratio: 2/3; background:#0001; border-radius: 10px; }
-    .rating {
-      position: absolute;
-      top: 8px; right: 8px;
-      padding: 3px 7px;
-      border-radius: 999px;
-      border: 1px solid #fff6;
-      background: rgba(0,0,0,.55);
-      font-size: 12px;
-      font-weight: 700;
+    .rating{
+      position:absolute;
+      top:8px; right:8px;
+      padding:4px 8px;
+      border-radius:999px;
+    
+      /* bättre kontrast på mörk poster */
+      background: rgba(255,255,255,.92);
+      color:#111;
+      border:1px solid rgba(0,0,0,.25);
+      box-shadow: 0 2px 10px rgba(0,0,0,.35);
+      font-size:12px;
+      font-weight:800;
+      letter-spacing:.2px;
     }
+    
     .title { margin-top: 8px; font-weight: 700; font-size: 14px; line-height: 1.2; }
     .meta { margin-top: 6px; display:flex; justify-content: space-between; gap:8px; align-items: baseline; }
+    <form method="post"
+          action="/delete/{{m[0]}}"
+          onsubmit="return confirm('Ta bort {{m[1]}}?');"
+          style="margin-top:8px;">
+      <button type="submit" class="danger">Ta bort</button>
+    </form>
     .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; border:1px solid #3333; }
     
+    .danger{
+      width:100%;
+      padding:8px 10px;
+      border-radius:10px;
+      border:1px solid #3333;
+      background:#fff;
+      font-size:14px;
+      cursor:pointer;
+    }
+    .danger:hover{
+      border-color:#b00020;
+      color:#b00020;
+    }
+    
   </style>
+  
 </head>
 <body>
   <h1>Movie Library</h1>
@@ -533,3 +561,28 @@ if __name__ == "__main__":
     os.makedirs("/config", exist_ok=True)
     init_db()
     app.run(host="0.0.0.0", port=5000)
+
+@app.route("/delete/<int:movie_id>", methods=["POST"])
+def delete_movie(movie_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    # Hämta ev posterfil för att kunna ta bort lokalt
+    c.execute("SELECT poster_file FROM movies WHERE id=?", (movie_id,))
+    row = c.fetchone()
+
+    c.execute("DELETE FROM movies WHERE id=?", (movie_id,))
+    conn.commit()
+    conn.close()
+
+    # Ta bort posterfil om den finns
+    if row and row[0]:
+        try:
+            posters_dir = Path("/config/movie_library/posters")
+            f = posters_dir / row[0]
+            if f.exists():
+                f.unlink()
+        except Exception:
+            pass
+
+    return redirect(url_for("home"))
