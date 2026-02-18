@@ -110,7 +110,7 @@ async function tmdbSearch() {
     <div class="card">
       <div><strong>${r.title}</strong> <span class="muted">(${r.year || ""})</span></div>
       <div class="muted">${r.original_title || ""}</div>
-      <button type="button" onclick="useTmdb(${r.id})">Välj</button>
+      <button type="button" onclick="addFromTmdb(${r.id})">Lägg till</button>
     </div>
   `).join("");
 }
@@ -125,6 +125,30 @@ async function useTmdb(id) {
   document.getElementById("year").value = data.year || "";
   document.getElementById("tmdb_results").innerHTML = `<div class="muted">Vald: ${data.title} (${data.year||""})</div>`;
 }
+
+async function addFromTmdb(id) {
+  const fmt = document.getElementById("format").value;
+  const res = await fetch(`tmdb/add/${id}`, {
+    method: "POST",
+    headers: {"Content-Type": "application/x-www-form-urlencoded"},
+    body: new URLSearchParams({format: fmt})
+  });
+
+  const data = await res.json();
+
+  if (data.status === "added") {
+    document.getElementById("tmdb_results").innerHTML =
+      `<div class="muted">Tillagd! Laddar om…</div>`;
+    window.location.reload();
+  } else if (data.status === "duplicate") {
+    document.getElementById("tmdb_results").innerHTML =
+      `<div class="muted">Finns redan i samlingen (dublett stoppad).</div>`;
+  } else {
+    document.getElementById("tmdb_results").innerHTML =
+      `<div class="err">${data.error || "Fel vid tillägg"}</div>`;
+  }
+}
+
 </script>
 </body>
 </html>
@@ -216,6 +240,40 @@ def add():
 
     conn.close()
     return redirect(url_for("home"))
+
+@app.route("/tmdb/add/<int:movie_id>", methods=["POST"])
+def tmdb_add(movie_id: int):
+    headers, err = tmdb_headers()
+    if err:
+        return jsonify({"error": err}), 400
+
+    url = f"https://api.themoviedb.org/3/movie/{movie_id}"
+    params = {"language": tmdb_language()}
+    r = requests.get(url, headers=headers, params=params, timeout=10)
+    if r.status_code != 200:
+        return jsonify({"error": f"TMDB-detaljer misslyckades ({r.status_code})"}), 502
+
+    j = r.json()
+    title = (j.get("title") or "").strip()
+    date = j.get("release_date") or ""
+    year = int(date.split("-")[0]) if date and date[:4].isdigit() else None
+
+    fmt = (request.form.get("format") or "Blu-ray").strip()
+
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    try:
+        c.execute(
+            "INSERT INTO movies (title, format, year, tmdb_id) VALUES (?, ?, ?, ?)",
+            (title, fmt, year, movie_id)
+        )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.close()
+        return jsonify({"status": "duplicate"}), 200
+
+    conn.close()
+    return jsonify({"status": "added"}), 200
 
 
 @app.route("/tmdb/search")
