@@ -192,7 +192,7 @@ HTML = """
       <div class="tile">
         <div class="posterwrap">
           {% if m[4] %}
-            <img src="/poster/{{m[4]}}" alt="">
+            <img src="poster/{{m[4]}}" alt="">
           {% else %}
             <div class="poster_placeholder"></div>
           {% endif %}
