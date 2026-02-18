@@ -121,7 +121,16 @@ HTML = """
   <title>Movie Library</title>
   
   <style>
-    body { font-family: system-ui, sans-serif; margin: 16px; }
+    body{
+      font-family: system-ui, sans-serif;
+      margin:16px;
+    
+      background:
+        radial-gradient(circle at 20% 20%, #1e2430 0%, #0f131a 60%),
+        linear-gradient(180deg, #111 0%, #0b0f15 100%);
+      color:#e6e6e6;
+    }
+    
     form { display: grid; gap: 10px; max-width: 520px; }
     input, select, button { padding: 10px; font-size: 16px; }
     table { border-collapse: collapse; width: 100%; margin-top: 18px; }
@@ -129,7 +138,14 @@ HTML = """
     .row { display:flex; gap:10px; flex-wrap:wrap; }
     .row > * { flex:1; min-width:160px; }
     .results { margin-top: 10px; }
-    .card { border: 1px solid #3333; border-radius: 10px; padding: 10px; margin: 8px 0; }
+    .card{
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:10px;
+      padding:10px;
+      margin:8px 0;
+      background: rgba(255,255,255,.03);
+    }
+    
     .muted { opacity: .7; }
     .err { color: #b00020; font-weight: 600; }
     
@@ -139,7 +155,21 @@ HTML = """
       grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
       gap: 14px;
     }
-    .tile { border: 1px solid #3333; border-radius: 12px; padding: 10px; }
+    
+    .tile{
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:12px;
+      padding:10px;
+      background: rgba(255,255,255,.04);
+      backdrop-filter: blur(2px);
+      transition: transform .12s ease, box-shadow .12s ease;
+    }
+    
+    .tile:hover{
+      transform: translateY(-3px);
+      box-shadow: 0 8px 24px rgba(0,0,0,.35);
+    }
+    
     .posterwrap { position: relative; }
     .posterwrap img { width: 100%; border-radius: 10px; display:block; }
     .poster_placeholder { width:100%; aspect-ratio: 2/3; background:#0001; border-radius: 10px; }
@@ -167,8 +197,9 @@ HTML = """
       width:100%;
       padding:8px 10px;
       border-radius:10px;
-      border:1px solid #3333;
-      background:#fff;
+      border:1px solid rgba(255,0,0,.2);
+      color:#ff8b8b;
+      background:#2a1215;
       font-size:14px;
       cursor:pointer;
     }
@@ -196,19 +227,19 @@ HTML = """
     .left{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     
     .search{
-      padding:10px 12px;
-      font-size:16px;
-      border:1px solid #3333;
-      border-radius:12px;
-      min-width: 260px;
+      background:#1b212c;
+      color:#fff;
+      border:1px solid rgba(255,255,255,.08);
     }
+    
     .search:focus{ outline:none; border-color:#3336; }
     
     .iconbtn{
       width:42px; height:42px;
       border-radius:999px;
-      border:1px solid #3333;
-      background:#fff;
+      border:1px solid rgba(255,255,255,.08);
+      background:#1b212c;
+      color:#fff;
       font-size:26px;
       line-height: 0;
       cursor:pointer;
@@ -220,8 +251,10 @@ HTML = """
     .modal.open{ display:block; }
     
     .modal-backdrop{
-      position:fixed; inset:0;
+      position:fixed;
+      inset:0;
       background: rgba(0,0,0,.45);
+      z-index: 9998;     /* VIKTIGT */
     }
     
     .modal-card{
@@ -233,11 +266,14 @@ HTML = """
       max-height: calc(100vh - 100px);
       overflow:auto;
     
-      background:#fff;
+      background:#1b212c;
       border-radius:16px;
-      border:1px solid #3333;
+      border:1px solid rgba(255,255,255,.08);
+      color:#eaeaea;
       box-shadow: 0 12px 40px rgba(0,0,0,.35);
       padding: 14px;
+    
+      z-index: 9999;     /* VIKTIGT */
     }
     
     .modal-head{

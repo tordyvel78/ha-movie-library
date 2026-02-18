@@ -1,6 +1,6 @@
 {
   "name": "Movie Library",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "slug": "movie_library",
   "description": "Local movie collection manager",
   "startup": "services",
