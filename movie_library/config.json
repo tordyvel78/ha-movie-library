@@ -1,6 +1,6 @@
 {
   "name": "Movie Library",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "slug": "movie_library",
   "description": "Local movie collection manager",
   "startup": "services",
@@ -8,16 +8,15 @@
   "ingress": true,
   "ingress_port": 5000,
   "panel_icon": "mdi:movie-open",
-  "map": [
-    "config:rw"
-  ],
-  "arch": ["aarch64", "armv7", "amd64"]
-}
-"options": {
-  "tmdb_token": "",
-  "tmdb_language": "sv-SE"
-},
-"schema": {
-  "tmdb_token": "str",
-  "tmdb_language": "str"
+  "map": ["config:rw"],
+  "arch": ["aarch64", "armv7", "amd64"],
+
+  "options": {
+    "tmdb_token": "",
+    "tmdb_language": "sv-SE"
+  },
+  "schema": {
+    "tmdb_token": "str",
+    "tmdb_language": "str"
+  }
 }
