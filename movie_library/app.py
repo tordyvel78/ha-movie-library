@@ -289,6 +289,18 @@ HTML = """
       font-size:22px;
     }
     
+    .mm_postercol{
+      width:260px;
+      flex:0 0 260px;
+    }
+    
+    @media (max-width: 520px){
+      .mm_postercol{
+        width: 100%;
+        flex: 1 1 100%;
+        max-width: 320px;
+      }
+    }
     
   </style>
   
@@ -353,7 +365,6 @@ HTML = """
     
         <div id="tmdb_results" class="results"></div>
     
-        <button type="submit">Lägg till</button>
       </form>
     </div>
   </div>
@@ -368,7 +379,7 @@ HTML = """
       </div>
   
       <div style="display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap;">
-        <div style="width:180px; flex:0 0 180px;">
+        <div class="mm_postercol">
           <img id="mm_poster" src="" alt="" style="width:100%; border-radius:12px; display:none;">
           <div id="mm_poster_ph" class="poster_placeholder" style="display:block; width:100%;"></div>
         </div>
