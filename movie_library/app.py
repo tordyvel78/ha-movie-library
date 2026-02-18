@@ -262,13 +262,20 @@ HTML = """
   <div class="topbar">
     <div class="left">
       <input id="lib_search" class="search" placeholder="Sök i samlingen…" autocomplete="off">
-      <a class="linkbtn" href="manage">Hantera</a>
+      {% if manage_mode %}
+        <a class="linkbtn" href="./">Tillbaka</a>
+      {% else %}
+        <a class="linkbtn" href="manage">Hantera</a>
+      {% endif %}
     </div>
   
+    {% if not manage_mode %}
     <button type="button" class="iconbtn" onclick="openAddModal()" aria-label="Lägg till film" title="Lägg till film">
       +
     </button>
+    {% endif %}
   </div>
+  
   
   <div id="search_hint" class="muted" style="margin-top:8px; display:none;"></div>
   
@@ -391,6 +398,7 @@ async function tmdbSearch() {
     </div>
   `).join("");
 }
+
 
 
 async function addFromTmdb(id) {
@@ -559,8 +567,21 @@ async function addMovie(formEl){
     });
 
     if (res.ok){
-      closeAddModal();
-      window.location.reload();
+
+      // Uppdatera bara griden
+      await refreshLibraryGrid();
+
+      // Visa liten tillagd-feedback
+      const box = document.getElementById("tmdb_results");
+      if (box){
+        const el = document.createElement("div");
+        el.className = "muted";
+        el.style.margin = "6px 0";
+        el.textContent = "Tillagd ✓";
+        box.prepend(el);
+        setTimeout(() => el.remove(), 900);
+      }
+
     } else {
       alert("Kunde inte lägga till (HTTP " + res.status + ").");
     }
@@ -568,6 +589,21 @@ async function addMovie(formEl){
     alert("Nätverksfel vid tillägg.");
   }
   return false;
+}
+
+async function refreshLibraryGrid(){
+  const res = await fetch(window.location.href, { cache: "no-store" });
+  const html = await res.text();
+
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const newGrid = doc.querySelector(".grid");
+  const curGrid = document.querySelector(".grid");
+
+  if (newGrid && curGrid){
+    curGrid.innerHTML = newGrid.innerHTML;
+  }
+
+  if (typeof filterLibrary === "function") filterLibrary();
 }
 
 
