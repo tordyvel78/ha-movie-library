@@ -290,7 +290,7 @@ HTML = """
     }
     
     .mm_postercol{
-      width:260px;
+      width:300px;
       flex:0 0 260px;
     }
     
@@ -750,12 +750,37 @@ function openAddModal(){
   m.classList.add("open");
   m.setAttribute("aria-hidden", "false");
 
-  // fokus på titel
+  // ===== Rensa TMDB-sök =====
+  const tmdbInput = document.getElementById("title");
+  if (tmdbInput) tmdbInput.value = "";
+
+  const results = document.getElementById("tmdb_results");
+  if (results) results.innerHTML = "";
+
+  // ===== Rensa hidden tmdb_id =====
+  const tmdbId = document.getElementById("tmdb_id");
+  if (tmdbId) tmdbId.value = "";
+
+  // ===== Rensa manuella fält =====
+  const manualTitle = document.querySelector('.manual input[name="title"]');
+  const manualYear  = document.querySelector('.manual input[name="year"]');
+
+  if (manualTitle) manualTitle.value = "";
+  if (manualYear) manualYear.value = "";
+
+  // ===== Återställ checkboxar =====
+  const checkboxes = document.querySelectorAll('input[name="format"]');
+  checkboxes.forEach(cb => cb.checked = false);
+
+  const blu = document.querySelector('input[name="format"][value="Blu-ray"]');
+  if (blu) blu.checked = true;
+
+  // Fokus på TMDB-sökfält
   setTimeout(() => {
-    const t = document.getElementById("title");
-    if (t) t.focus();
+    if (tmdbInput) tmdbInput.focus();
   }, 0);
 }
+
 
 function closeAddModal(){
   const m = document.getElementById("addModal");
