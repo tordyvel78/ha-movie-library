@@ -1,12 +1,15 @@
 import os, sqlite3
 import requests
 from flask import Flask, request, jsonify, render_template_string, redirect, url_for
+from time import time
 
 app = Flask(__name__)
 DB_PATH = "/config/movies.db"
 
 # Home Assistant add-on options hamnar i /data/options.json
 OPTIONS_PATH = "/data/options.json"
+
+_tmdb_cache = {}  # movie_id -> (expires_ts, payload)
 
 def load_options():
     try:
@@ -26,6 +29,79 @@ def tmdb_headers():
 def tmdb_language():
     opts = load_options()
     return (opts.get("tmdb_language") or "sv-SE").strip()
+
+def _cache_get(movie_id: int):
+    item = _tmdb_cache.get(movie_id)
+    if not item:
+        return None
+    exp, payload = item
+    if time() > exp:
+        _tmdb_cache.pop(movie_id, None)
+        return None
+    return payload
+
+def _cache_set(movie_id: int, payload: dict, ttl_seconds: int = 3600):
+    _tmdb_cache[movie_id] = (time() + ttl_seconds, payload)
+
+@app.route("/tmdb/search_enriched")
+def tmdb_search_enriched():
+    headers, err = tmdb_headers()
+    if err:
+        return jsonify({"error": err}), 400
+
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify({"results": []})
+
+    # 1) Sök
+    url = "https://api.themoviedb.org/3/search/movie"
+    params = {"query": q, "language": tmdb_language(), "include_adult": "false"}
+    r = requests.get(url, headers=headers, params=params, timeout=10)
+    if r.status_code != 200:
+        return jsonify({"error": f"TMDB-sök misslyckades ({r.status_code})"}), 502
+
+    j = r.json()
+    base_results = j.get("results", [])[:8]  # vi enrichar topp 8
+
+    out = []
+    for item in base_results:
+        movie_id = item.get("id")
+        title = item.get("title") or ""
+        original_title = item.get("original_title") or ""
+        date = item.get("release_date") or ""
+        year = date.split("-")[0] if date else ""
+        overview = (item.get("overview") or "").strip()
+        vote = item.get("vote_average")
+        poster = item.get("poster_path")
+
+        poster_url = f"https://image.tmdb.org/t/p/w185{poster}" if poster else None
+
+        # 2) Runtime kräver detaljer – cacha 1h
+        cached = _cache_get(movie_id) if movie_id else None
+        runtime = None
+        if cached is not None:
+            runtime = cached.get("runtime")
+        elif movie_id:
+            durl = f"https://api.themoviedb.org/3/movie/{movie_id}"
+            dparams = {"language": tmdb_language()}
+            dr = requests.get(durl, headers=headers, params=dparams, timeout=10)
+            if dr.status_code == 200:
+                dj = dr.json()
+                runtime = dj.get("runtime")
+                _cache_set(movie_id, {"runtime": runtime})
+
+        out.append({
+            "id": movie_id,
+            "title": title,
+            "original_title": original_title,
+            "year": year,
+            "overview": overview,
+            "vote": vote,
+            "runtime": runtime,     # minuter
+            "poster": poster_url
+        })
+
+    return jsonify({"results": out})
 
 HTML = """
 <!doctype html>
@@ -93,7 +169,7 @@ async function tmdbSearch() {
   box.innerHTML = "";
   if (!q) return;
 
-  const res = await fetch(`tmdb/search?q=${encodeURIComponent(q)}`);
+  const res = await fetch(`tmdb/search_enriched?q=${encodeURIComponent(q)}`);
   const data = await res.json();
 
   if (!res.ok) {
@@ -148,6 +224,18 @@ async function addFromTmdb(id) {
       `<div class="err">${data.error || "Fel vid tillägg"}</div>`;
   }
 }
+
+function wireEnterToSearch() {
+  const title = document.getElementById("title");
+  title.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();   // stoppar form submit
+      tmdbSearch();
+    }
+  });
+}
+
+document.addEventListener("DOMContentLoaded", wireEnterToSearch);
 
 </script>
 </body>
