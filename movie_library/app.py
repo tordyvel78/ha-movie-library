@@ -131,16 +131,33 @@ async function useTmdb(id) {
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+
+    # Skapa tabell om den inte finns (ny installation)
     c.execute("""
         CREATE TABLE IF NOT EXISTS movies (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             format TEXT NOT NULL,
-            year INTEGER
+            year INTEGER,
+            tmdb_id INTEGER
         )
     """)
+
+    # Migrera: lägg till kolumnen tmdb_id om den saknas
+    c.execute("PRAGMA table_info(movies)")
+    cols = [row[1] for row in c.fetchall()]
+    if "tmdb_id" not in cols:
+        c.execute("ALTER TABLE movies ADD COLUMN tmdb_id INTEGER")
+
+    # Unikhet på tmdb_id (hindrar dubletter från TMDB)
+    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_movies_tmdb_id ON movies(tmdb_id)")
+
+    # (Valfritt men bra) Unikhet för manuella inlägg: title+year+format
+    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_movies_title_year_format ON movies(title, year, format)")
+
     conn.commit()
     conn.close()
+
 
 def get_all_movies():
     conn = sqlite3.connect(DB_PATH)
