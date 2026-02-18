@@ -1,0 +1,17 @@
+{
+  "name": "Movie Library",
+  "version": "1.0.0",
+  "slug": "movie_library",
+  "description": "Local movie collection manager",
+  "startup": "services",
+  "boot": "auto",
+  "ingress": true,
+  "panel_icon": "mdi:movie-open",
+  "ports": {
+    "5000/tcp": 5000
+  },
+  "map": [
+    "config:rw"
+  ],
+  "arch": ["aarch64", "armv7", "amd64"]
+}
