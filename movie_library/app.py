@@ -584,7 +584,14 @@ async function tmdbSearch() {
 
 
 async function addFromTmdb(id) {
-  const fmt = document.getElementById("format").value;
+
+  // Hämta markerade checkbox-format
+  const checked = Array.from(
+    document.querySelectorAll('input[name="format"]:checked')
+  ).map(cb => cb.value);
+
+  const fmt = checked.length ? checked.join(", ") : "Blu-ray";
+
   const res = await fetch(`tmdb/add/${id}`, {
     method: "POST",
     headers: {"Content-Type": "application/x-www-form-urlencoded"},
@@ -596,7 +603,7 @@ async function addFromTmdb(id) {
   if (data.status === "added") {
 
     await refreshLibraryGrid();
-  
+
     const box = document.getElementById("tmdb_results");
     if (box){
       const el = document.createElement("div");
@@ -606,19 +613,20 @@ async function addFromTmdb(id) {
       box.prepend(el);
       setTimeout(() => el.remove(), 900);
     }
-  
+
   } else if (data.status === "duplicate") {
-  
+
     document.getElementById("tmdb_results").innerHTML =
       `<div class="muted">Finns redan i samlingen (dublett stoppad).</div>`;
-  
+
   } else {
-  
+
     document.getElementById("tmdb_results").innerHTML =
       `<div class="err">${data.error || "Fel vid tillägg"}</div>`;
-  
+
   }
 }
+
 
 function wireEnterToSearch() {
   const title = document.getElementById("title");
