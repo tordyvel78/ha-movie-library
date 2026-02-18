@@ -1,9 +1,31 @@
+import os, sqlite3
+import requests
 from flask import Flask, request, jsonify, render_template_string, redirect, url_for
-import sqlite3
-import os
 
 app = Flask(__name__)
 DB_PATH = "/config/movies.db"
+
+# Home Assistant add-on options hamnar i /data/options.json
+OPTIONS_PATH = "/data/options.json"
+
+def load_options():
+    try:
+        import json
+        with open(OPTIONS_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def tmdb_headers():
+    opts = load_options()
+    token = (opts.get("tmdb_token") or "").strip()
+    if not token:
+        return None, "TMDB-token saknas. Lägg in den i appens konfiguration."
+    return {"Authorization": f"Bearer {token}"}, None
+
+def tmdb_language():
+    opts = load_options()
+    return (opts.get("tmdb_language") or "sv-SE").strip()
 
 HTML = """
 <!doctype html>
@@ -14,45 +36,94 @@ HTML = """
   <title>Movie Library</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 16px; }
-    h1 { margin-top: 0; }
-    form { display: grid; gap: 10px; max-width: 420px; }
+    form { display: grid; gap: 10px; max-width: 520px; }
     input, select, button { padding: 10px; font-size: 16px; }
     table { border-collapse: collapse; width: 100%; margin-top: 18px; }
     th, td { border-bottom: 1px solid #3333; padding: 10px; text-align: left; }
-    .row { display: flex; gap: 10px; flex-wrap: wrap; }
-    .row > * { flex: 1; min-width: 120px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; }
+    .row > * { flex:1; min-width:160px; }
+    .results { margin-top: 10px; }
+    .card { border: 1px solid #3333; border-radius: 10px; padding: 10px; margin: 8px 0; }
+    .muted { opacity: .7; }
+    .err { color: #b00020; font-weight: 600; }
   </style>
 </head>
 <body>
   <h1>Movie Library</h1>
 
+  {% if error %}
+    <div class="err">{{error}}</div>
+  {% endif %}
+
   <form method="post" action="/add">
     <div class="row">
-      <input name="title" placeholder="Titel" required>
-      <input name="year" placeholder="År" type="number" min="1888" max="2100">
+      <input id="title" name="title" placeholder="Titel" required value="{{prefill_title or ''}}">
+      <input id="year" name="year" placeholder="År" type="number" min="1888" max="2100" value="{{prefill_year or ''}}">
     </div>
-    <select name="format" required>
-      <option value="Blu-ray">Blu-ray</option>
-      <option value="4K UHD">4K UHD</option>
-      <option value="DVD">DVD</option>
-    </select>
+
+    <div class="row">
+      <select id="format" name="format" required>
+        {% for opt in ["Blu-ray","4K UHD","DVD"] %}
+          <option value="{{opt}}" {% if prefill_format==opt %}selected{% endif %}>{{opt}}</option>
+        {% endfor %}
+      </select>
+
+      <button type="button" onclick="tmdbSearch()">Sök på TMDB</button>
+    </div>
+
+    <div id="tmdb_results" class="results"></div>
+
     <button type="submit">Lägg till</button>
   </form>
 
   <table>
-    <thead>
-      <tr><th>Titel</th><th>Format</th><th>År</th></tr>
-    </thead>
+    <thead><tr><th>Titel</th><th>Format</th><th>År</th></tr></thead>
     <tbody>
       {% for m in movies %}
-        <tr>
-          <td>{{m[1]}}</td>
-          <td>{{m[2]}}</td>
-          <td>{{m[3] if m[3] else ""}}</td>
-        </tr>
+        <tr><td>{{m[1]}}</td><td>{{m[2]}}</td><td>{{m[3] if m[3] else ""}}</td></tr>
       {% endfor %}
     </tbody>
   </table>
+
+<script>
+async function tmdbSearch() {
+  const q = document.getElementById("title").value.trim();
+  const box = document.getElementById("tmdb_results");
+  box.innerHTML = "";
+  if (!q) return;
+
+  const res = await fetch(`/tmdb/search?q=${encodeURIComponent(q)}`);
+  const data = await res.json();
+
+  if (!res.ok) {
+    box.innerHTML = `<div class="err">${data.error || "TMDB-fel"}</div>`;
+    return;
+  }
+
+  if (!data.results || data.results.length === 0) {
+    box.innerHTML = `<div class="muted">Inga träffar på TMDB.</div>`;
+    return;
+  }
+
+  box.innerHTML = data.results.slice(0, 8).map(r => `
+    <div class="card">
+      <div><strong>${r.title}</strong> <span class="muted">(${r.year || ""})</span></div>
+      <div class="muted">${r.original_title || ""}</div>
+      <button type="button" onclick="useTmdb(${r.id})">Välj</button>
+    </div>
+  `).join("");
+}
+
+async function useTmdb(id) {
+  const res = await fetch(`/tmdb/movie/${id}`);
+  const data = await res.json();
+  if (!res.ok) return;
+
+  document.getElementById("title").value = data.title || "";
+  document.getElementById("year").value = data.year || "";
+  document.getElementById("tmdb_results").innerHTML = `<div class="muted">Vald: ${data.title} (${data.year||""})</div>`;
+}
+</script>
 </body>
 </html>
 """
@@ -81,7 +152,8 @@ def get_all_movies():
 
 @app.route("/")
 def home():
-    return render_template_string(HTML, movies=get_all_movies())
+    return render_template_string(HTML, movies=get_all_movies(), error=None,
+                                  prefill_title=None, prefill_year=None, prefill_format="Blu-ray")
 
 @app.route("/add", methods=["POST"])
 def add():
@@ -98,10 +170,49 @@ def add():
     conn.close()
     return redirect(url_for("home"))
 
-# API (valfritt men bra att ha kvar)
-@app.route("/api/movies", methods=["GET"])
-def api_movies():
-    return jsonify(get_all_movies())
+@app.route("/tmdb/search")
+def tmdb_search():
+    headers, err = tmdb_headers()
+    if err:
+        return jsonify({"error": err}), 400
+
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify({"results": []})
+
+    url = "https://api.themoviedb.org/3/search/movie"
+    params = {"query": q, "language": tmdb_language(), "include_adult": "false"}
+    r = requests.get(url, headers=headers, params=params, timeout=10)
+    if r.status_code != 200:
+        return jsonify({"error": f"TMDB-sök misslyckades ({r.status_code})"}), 502
+
+    j = r.json()
+    out = []
+    for item in j.get("results", [])[:20]:
+        title = item.get("title") or ""
+        original_title = item.get("original_title") or ""
+        date = item.get("release_date") or ""
+        year = date.split("-")[0] if date else ""
+        out.append({"id": item.get("id"), "title": title, "original_title": original_title, "year": year})
+    return jsonify({"results": out})
+
+@app.route("/tmdb/movie/<int:movie_id>")
+def tmdb_movie(movie_id: int):
+    headers, err = tmdb_headers()
+    if err:
+        return jsonify({"error": err}), 400
+
+    url = f"https://api.themoviedb.org/3/movie/{movie_id}"
+    params = {"language": tmdb_language()}
+    r = requests.get(url, headers=headers, params=params, timeout=10)
+    if r.status_code != 200:
+        return jsonify({"error": f"TMDB-detaljer misslyckades ({r.status_code})"}), 502
+
+    j = r.json()
+    title = j.get("title") or ""
+    date = j.get("release_date") or ""
+    year = date.split("-")[0] if date else ""
+    return jsonify({"title": title, "year": year})
 
 if __name__ == "__main__":
     os.makedirs("/config", exist_ok=True)
