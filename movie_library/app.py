@@ -90,29 +90,24 @@ HTML = """
 async function tmdbSearch() {
   const q = document.getElementById("title").value.trim();
   const box = document.getElementById("tmdb_results");
-  box.innerHTML = "";
-  if (!q) return;
-
-  const res = await fetch(`tmdb/search?q=${encodeURIComponent(q)}`);
-  const data = await res.json();
-
-  if (!res.ok) {
-    box.innerHTML = `<div class="err">${data.error || "TMDB-fel"}</div>`;
-    return;
-  }
-
-  if (!data.results || data.results.length === 0) {
-    box.innerHTML = `<div class="muted">Inga träffar på TMDB.</div>`;
-    return;
-  }
-
   box.innerHTML = data.results.slice(0, 8).map(r => `
-    <div class="card">
-      <div><strong>${r.title}</strong> <span class="muted">(${r.year || ""})</span></div>
-      <div class="muted">${r.original_title || ""}</div>
-      <button type="button" onclick="addFromTmdb(${r.id})">Lägg till</button>
+  <div class="card" style="display:flex; gap:12px;">
+    ${r.poster ? `<img src="${r.poster}" style="width:92px; border-radius:6px;">` : ""}
+    <div style="flex:1;">
+      <div><strong>${r.title}</strong> (${r.year || ""})</div>
+      <div style="font-size:13px; opacity:0.7;">
+        ⭐ ${r.vote || "-"} 
+      </div>
+      <div style="font-size:13px; margin-top:6px;">
+        ${(r.overview || "").substring(0, 150)}...
+      </div>
+      <button type="button" onclick="addFromTmdb(${r.id})">
+        Lägg till
+      </button>
     </div>
-  `).join("");
+  </div>
+`).join("");
+
 }
 
 async function useTmdb(id) {
