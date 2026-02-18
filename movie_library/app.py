@@ -167,29 +167,47 @@ async function tmdbSearch() {
   const q = document.getElementById("title").value.trim();
   const box = document.getElementById("tmdb_results");
   box.innerHTML = "";
-  if (!q) return;
+
+  if (!q) {
+    box.innerHTML = `<div class="muted">Skriv en titel först.</div>`;
+    return;
+  }
+
+  box.innerHTML = `<div class="muted">Söker…</div>`;
 
   const res = await fetch(`tmdb/search_enriched?q=${encodeURIComponent(q)}`);
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
     box.innerHTML = `<div class="err">${data.error || "TMDB-fel"}</div>`;
     return;
   }
 
-  if (!data.results || data.results.length === 0) {
+  const results = data.results || [];
+  if (results.length === 0) {
     box.innerHTML = `<div class="muted">Inga träffar på TMDB.</div>`;
     return;
   }
 
-  box.innerHTML = data.results.slice(0, 8).map(r => `
-    <div class="card">
-      <div><strong>${r.title}</strong> <span class="muted">(${r.year || ""})</span></div>
-      <div class="muted">${r.original_title || ""}</div>
-      <button type="button" onclick="addFromTmdb(${r.id})">Lägg till</button>
+  box.innerHTML = results.map(r => `
+    <div class="card" style="display:flex; gap:12px; align-items:flex-start;">
+      ${r.poster ? `<img src="${r.poster}" style="width:70px; border-radius:6px;">` : `<div style="width:70px;"></div>`}
+      <div style="flex:1;">
+        <div style="display:flex; gap:10px; align-items:baseline; flex-wrap:wrap;">
+          <strong>${r.title}</strong>
+          <span class="muted">${r.year || ""}</span>
+          <span class="muted">⭐ ${r.vote ?? "-"}</span>
+          <span class="muted">${r.runtime ? `${r.runtime} min` : ""}</span>
+        </div>
+        ${r.overview ? `<div style="margin-top:6px;">${r.overview.substring(0, 200)}${r.overview.length>200?"…":""}</div>` : ""}
+        <div style="margin-top:8px;">
+          <button type="button" onclick="addFromTmdb(${r.id})">Lägg till</button>
+        </div>
+      </div>
     </div>
   `).join("");
 }
+
 
 async function useTmdb(id) {
   const res = await fetch(`tmdb/movie/${id}`);
@@ -234,7 +252,6 @@ function wireEnterToSearch() {
     }
   });
 }
-
 document.addEventListener("DOMContentLoaded", wireEnterToSearch);
 
 </script>
