@@ -287,38 +287,45 @@ def tmdb_search():
         return jsonify({"results": []})
 
     url = "https://api.themoviedb.org/3/search/movie"
-    params = {"query": q, "language": tmdb_language(), "include_adult": "false"}
+    params = {
+        "query": q,
+        "language": tmdb_language(),
+        "include_adult": "false"
+    }
+
     r = requests.get(url, headers=headers, params=params, timeout=10)
     if r.status_code != 200:
         return jsonify({"error": f"TMDB-sök misslyckades ({r.status_code})"}), 502
 
     j = r.json()
     out = []
-for item in j.get("results", [])[:20]:
-    title = item.get("title") or ""
-    original_title = item.get("original_title") or ""
-    date = item.get("release_date") or ""
-    year = date.split("-")[0] if date else ""
-    overview = item.get("overview") or ""
-    vote = item.get("vote_average") or ""
-    poster = item.get("poster_path")
 
-    poster_url = (
-        f"https://image.tmdb.org/t/p/w185{poster}"
-        if poster else None
-    )
+    for item in j.get("results", [])[:20]:
+        title = item.get("title") or ""
+        original_title = item.get("original_title") or ""
+        date = item.get("release_date") or ""
+        year = date.split("-")[0] if date else ""
+        overview = item.get("overview") or ""
+        vote = item.get("vote_average")
+        poster = item.get("poster_path")
 
-    out.append({
-        "id": item.get("id"),
-        "title": title,
-        "original_title": original_title,
-        "year": year,
-        "overview": overview,
-        "vote": vote,
-        "poster": poster_url
-    })
+        poster_url = (
+            f"https://image.tmdb.org/t/p/w185{poster}"
+            if poster else None
+        )
+
+        out.append({
+            "id": item.get("id"),
+            "title": title,
+            "original_title": original_title,
+            "year": year,
+            "overview": overview,
+            "vote": vote,
+            "poster": poster_url
+        })
 
     return jsonify({"results": out})
+
 
 @app.route("/tmdb/movie/<int:movie_id>")
 def tmdb_movie(movie_id: int):
