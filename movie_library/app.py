@@ -363,6 +363,22 @@ HTML = """
       border-color:#4a90ff;
     }
     
+    .format-bar{
+      margin: 12px 0 4px 0;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border:1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.05);
+      display:flex;
+      justify-content:center;
+    }
+    
+    .format-group{
+      display:flex;
+      gap:22px;
+    }
+    
+    
     
   </style>
   
@@ -413,59 +429,57 @@ HTML = """
         <!-- ================= TMDB-SEKTION ================= -->
         <div class="section">
           <div class="section-title">Sök på TMDB</div>
-      
+        
           <div class="tmdb-search-row">
             <input id="title"
                    name="title"
                    placeholder="Filmtitel…"
                    autocomplete="off">
-      
+        
             <button type="button" onclick="tmdbSearch()">Sök</button>
           </div>
-      
+        
           <div id="tmdb_results" class="results"></div>
         </div>
-      
-      
-        <!-- ================= MANUELL SEKTION ================= -->
-        <div class="section manual">
-          <div class="section-title">Manuell inläggning</div>
-      
-          <div class="row">
-            <input name="title"
-                   placeholder="Titel"
-                   required>
-      
-            <input name="year"
-                   placeholder="År"
-                   type="number"
-                   min="1888"
-                   max="2100">
-          </div>
-      
+        
+        
+        <!-- ================= FORMAT (GEMENSAM) ================= -->
+        <div class="format-bar">
           <div class="format-group">
             <label class="chk">
               <input type="checkbox" name="format" value="Blu-ray" checked>
               Blu-ray
             </label>
-      
+        
             <label class="chk">
               <input type="checkbox" name="format" value="4K UHD">
               4K UHD
             </label>
-      
+        
             <label class="chk">
               <input type="checkbox" name="format" value="DVD">
               DVD
             </label>
           </div>
-      
+        </div>
+        
+        
+        <!-- ================= MANUELL SEKTION ================= -->
+        <div class="section manual">
+          <div class="section-title">Manuell inläggning</div>
+        
+          <div class="row">
+            <input name="title" placeholder="Titel" required>
+            <input name="year" placeholder="År" type="number" min="1888" max="2100">
+          </div>
+        
           <input type="hidden" id="tmdb_id" name="tmdb_id">
-      
+        
           <button type="submit" class="primary-btn">
             Lägg till manuellt
           </button>
         </div>
+        
       
       </form>
       
