@@ -358,9 +358,38 @@ HTML = """
     </div>
   </div>
   
+  <div id="movieModal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" onclick="closeMovieModal()"></div>
+  
+    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Filmdetaljer">
+      <div class="modal-head">
+        <strong id="mm_title">Film</strong>
+        <button type="button" class="iconbtn small" onclick="closeMovieModal()" aria-label="Stäng">×</button>
+      </div>
+  
+      <div style="display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap;">
+        <div style="width:180px; flex:0 0 180px;">
+          <img id="mm_poster" src="" alt="" style="width:100%; border-radius:12px; display:none;">
+          <div id="mm_poster_ph" class="poster_placeholder" style="display:block; width:100%;"></div>
+        </div>
+  
+        <div style="flex:1; min-width:240px;">
+          <div class="muted" id="mm_meta" style="margin-bottom:8px;"></div>
+          <div id="mm_overview" style="line-height:1.45;"></div>
+  
+          <div id="mm_genres" class="muted" style="margin-top:10px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
   <div class="grid">
     {% for m in movies %}
-      <div class="tile" data-title="{{ (m[1] or '')|lower }}" data-year="{{ (m[3] or '') }}" data-format="{{ (m[2] or '')|lower }}">
+      <div class="tile"
+           data-id="{{m[0]}}"
+           data-title="{{ (m[1] or '')|lower }}"
+           data-year="{{ (m[3] or '') }}"
+           data-format="{{ (m[2] or '')|lower }}">
         <div class="posterwrap">
           {% if m[4] %}
             <img src="poster/{{m[4]}}" alt="">
@@ -451,15 +480,29 @@ async function addFromTmdb(id) {
   const data = await res.json();
 
   if (data.status === "added") {
-    document.getElementById("tmdb_results").innerHTML =
-      `<div class="muted">Tillagd! Laddar om…</div>`;
-    window.location.reload();
+
+    await refreshLibraryGrid();
+  
+    const box = document.getElementById("tmdb_results");
+    if (box){
+      const el = document.createElement("div");
+      el.className = "muted";
+      el.style.margin = "6px 0";
+      el.textContent = "Tillagd ✓";
+      box.prepend(el);
+      setTimeout(() => el.remove(), 900);
+    }
+  
   } else if (data.status === "duplicate") {
+  
     document.getElementById("tmdb_results").innerHTML =
       `<div class="muted">Finns redan i samlingen (dublett stoppad).</div>`;
+  
   } else {
+  
     document.getElementById("tmdb_results").innerHTML =
       `<div class="err">${data.error || "Fel vid tillägg"}</div>`;
+  
   }
 }
 
@@ -482,7 +525,7 @@ async function deleteMovie(formEl) {
     const res = await fetch(formEl.action, { method: "POST" });
     if (res.ok) {
       // Ladda om nuvarande sida (med rätt ingress-prefix)
-      window.location.reload();
+      await refreshLibraryGrid();
     } else {
       alert("Kunde inte ta bort (HTTP " + res.status + ").");
     }
@@ -643,17 +686,88 @@ async function refreshLibraryGrid(){
   }
 
   if (typeof filterLibrary === "function") filterLibrary();
+  wireTileClicks();
 }
 
+function openMovieModal(){
+  const m = document.getElementById("movieModal");
+  m.classList.add("open");
+  m.setAttribute("aria-hidden", "false");
+}
+function closeMovieModal(){
+  const m = document.getElementById("movieModal");
+  m.classList.remove("open");
+  m.setAttribute("aria-hidden", "true");
+}
+
+async function showMovieDetails(movieRowId){
+  openMovieModal();
+
+  // reset UI
+  document.getElementById("mm_title").textContent = "Laddar…";
+  document.getElementById("mm_meta").textContent = "";
+  document.getElementById("mm_overview").textContent = "";
+  document.getElementById("mm_genres").textContent = "";
+
+  const img = document.getElementById("mm_poster");
+  const ph  = document.getElementById("mm_poster_ph");
+  img.style.display = "none";
+  ph.style.display = "block";
+
+  const res = await fetch(`movie/${movieRowId}`, { cache: "no-store" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok){
+    document.getElementById("mm_title").textContent = "Kunde inte ladda";
+    document.getElementById("mm_overview").textContent = data.error || "Fel";
+    return;
+  }
+
+  document.getElementById("mm_title").textContent = data.title || "Film";
+
+  const bits = [];
+  if (data.year) bits.push(data.year);
+  if (data.format) bits.push(data.format);
+  if (data.runtime) bits.push(`${data.runtime} min`);
+  if (data.vote != null) bits.push(`⭐ ${Number(data.vote).toFixed(1)}`);
+  document.getElementById("mm_meta").textContent = bits.join(" • ");
+
+  const ov = data.overview || "Ingen handling hittades.";
+  document.getElementById("mm_overview").textContent = ov;
+
+  if (data.genres && data.genres.length){
+    document.getElementById("mm_genres").textContent = data.genres.join(" / ");
+  }
+
+  if (data.poster_local){
+    img.src = data.poster_local;
+    img.onload = () => { ph.style.display = "none"; img.style.display = "block"; };
+    img.onerror = () => { img.style.display = "none"; ph.style.display = "block"; };
+  }
+}
+
+function wireTileClicks(){
+  document.querySelectorAll(".grid .tile").forEach(tile => {
+    tile.addEventListener("click", (e) => {
+      // Om man klickar på delete-knappen i manage-läge: låt den vara
+      if (e.target && e.target.closest && e.target.closest("form")) return;
+
+      const id = tile.dataset.id;
+      if (id) showMovieDetails(id);
+    });
+  });
+}
+
+document.addEventListener("DOMContentLoaded", wireTileClicks);
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape"){
-    const m = document.getElementById("addModal");
-    if (m && m.classList.contains("open")) closeAddModal();
+    const add = document.getElementById("addModal");
+    const mov = document.getElementById("movieModal");
+
+    if (add && add.classList.contains("open")) closeAddModal();
+    if (mov && mov.classList.contains("open")) closeMovieModal();
   }
 });
-
-
 
 </script>
 </body>
@@ -925,6 +1039,61 @@ def manage():
         prefill_format="Blu-ray",
         manage_mode=True
     )
+
+@app.route("/movie/<int:movie_row_id>")
+def movie_details(movie_row_id: int):
+    # Hämta från DB
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, title, format, year, poster_file, vote, tmdb_id FROM movies WHERE id=?", (movie_row_id,))
+    row = c.fetchone()
+    conn.close()
+
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+
+    _id, title, fmt, year, poster_file, vote, tmdb_id = row
+
+    payload = {
+        "id": _id,
+        "title": title,
+        "format": fmt,
+        "year": year,
+        "poster_local": f"poster/{poster_file}" if poster_file else None,
+        "vote": vote,
+        "tmdb_id": tmdb_id,
+        "overview": None,
+        "runtime": None,
+        "release_date": None,
+        "genres": [],
+    }
+
+    # Om vi har tmdb_id: hämta extra info från TMDB (cacha)
+    if tmdb_id:
+        cached = _cache_get(int(tmdb_id))
+        if cached is not None and cached.get("details"):
+            payload.update(cached["details"])
+            return jsonify(payload)
+
+        headers, err = tmdb_headers()
+        if not err:
+            url = f"https://api.themoviedb.org/3/movie/{int(tmdb_id)}"
+            params = {"language": tmdb_language()}
+            r = requests.get(url, headers=headers, params=params, timeout=10)
+            if r.status_code == 200:
+                j = r.json()
+                details = {
+                    "overview": (j.get("overview") or "").strip() or None,
+                    "runtime": j.get("runtime"),
+                    "release_date": j.get("release_date"),
+                    "genres": [g.get("name") for g in (j.get("genres") or []) if g.get("name")],
+                    "vote": j.get("vote_average") if j.get("vote_average") is not None else payload["vote"],
+                }
+                payload.update(details)
+                _cache_set(int(tmdb_id), {"details": details}, ttl_seconds=3600)
+
+    return jsonify(payload)
+
 
 if __name__ == "__main__":
     os.makedirs("/config", exist_ok=True)
