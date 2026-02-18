@@ -92,7 +92,7 @@ async function tmdbSearch() {
   box.innerHTML = "";
   if (!q) return;
 
-  const res = await fetch(`/tmdb/search?q=${encodeURIComponent(q)}`);
+  const res = await fetch(`tmdb/search?q=${encodeURIComponent(q)}`);
   const data = await res.json();
 
   if (!res.ok) {
@@ -115,7 +115,7 @@ async function tmdbSearch() {
 }
 
 async function useTmdb(id) {
-  const res = await fetch(`/tmdb/movie/${id}`);
+  const res = await fetch(`tmdb/movie/${id}`);
   const data = await res.json();
   if (!res.ok) return;
 
