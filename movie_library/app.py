@@ -176,42 +176,145 @@ HTML = """
       border-color:#b00020;
       color:#b00020;
     }
+    .linkbtn{
+      display:inline-block;
+      padding:10px 12px;
+      border:1px solid #3333;
+      border-radius:12px;
+      text-decoration:none;
+      color:inherit;
+    }
+    .linkbtn:hover{ border-color:#3336; }
+    
+    .topbar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin: 10px 0 14px 0;
+    }
+    .left{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    
+    .search{
+      padding:10px 12px;
+      font-size:16px;
+      border:1px solid #3333;
+      border-radius:12px;
+      min-width: 260px;
+    }
+    .search:focus{ outline:none; border-color:#3336; }
+    
+    .iconbtn{
+      width:42px; height:42px;
+      border-radius:999px;
+      border:1px solid #3333;
+      background:#fff;
+      font-size:26px;
+      line-height: 0;
+      cursor:pointer;
+    }
+    .iconbtn:hover{ border-color:#3336; }
+    
+    .modal{ display:none; }
+    .modal.open{ display:block; }
+    
+    .modal-backdrop{
+      position:fixed; inset:0;
+      background: rgba(0,0,0,.45);
+    }
+    
+    .modal-card{
+      position:fixed;
+      top: 72px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(720px, calc(100vw - 24px));
+      max-height: calc(100vh - 100px);
+      overflow:auto;
+    
+      background:#fff;
+      border-radius:16px;
+      border:1px solid #3333;
+      box-shadow: 0 12px 40px rgba(0,0,0,.35);
+      padding: 14px;
+    }
+    
+    .modal-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom: 10px;
+    }
+    
+    .iconbtn.small{
+      width:36px; height:36px;
+      font-size:22px;
+    }
+    
     
   </style>
   
 </head>
 <body>
   <h1>Movie Library</h1>
+  
+  <div class="topbar">
+    <div class="left">
+      <input id="lib_search" class="search" placeholder="Sök i samlingen…" autocomplete="off">
+      <a class="linkbtn" href="manage">Hantera</a>
+    </div>
+  
+    <button type="button" class="iconbtn" onclick="openAddModal()" aria-label="Lägg till film" title="Lägg till film">
+      +
+    </button>
+  </div>
+  
+  <div id="search_hint" class="muted" style="margin-top:8px; display:none;"></div>
+  
 
   {% if error %}
     <div class="err">{{error}}</div>
   {% endif %}
 
-  <form method="post" action="add">
-    <div class="row">
-      <input id="title" name="title" placeholder="Titel" required value="{{prefill_title or ''}}">
-      <input id="year" name="year" placeholder="År" type="number" min="1888" max="2100" value="{{prefill_year or ''}}">
-      <input type="hidden" id="tmdb_id" name="tmdb_id" value="">
+  
+
+  <div id="addModal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" onclick="closeAddModal()"></div>
+  
+    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Lägg till film">
+      <div class="modal-head">
+        <strong>Lägg till film</strong>
+        <button type="button" class="iconbtn small" onclick="closeAddModal()" aria-label="Stäng">×</button>
+      </div>
+  
+      <form method="post" action="add" onsubmit="return addMovie(this);">
+        <div class="row">
+          <input id="title" name="title" placeholder="Titel" required value="{{prefill_title or ''}}">
+          <input id="year" name="year" placeholder="År" type="number" min="1888" max="2100" value="{{prefill_year or ''}}">
+          <input type="hidden" id="tmdb_id" name="tmdb_id" value="">
+        </div>
+    
+        <div class="row">
+          <select id="format" name="format" required>
+            {% for opt in ["Blu-ray","4K UHD","DVD"] %}
+              <option value="{{opt}}" {% if prefill_format==opt %}selected{% endif %}>{{opt}}</option>
+            {% endfor %}
+          </select>
+    
+          <button type="button" onclick="tmdbSearch()">Sök på TMDB</button>
+        </div>
+    
+        <div id="tmdb_results" class="results"></div>
+    
+        <button type="submit">Lägg till</button>
+      </form>
     </div>
-
-    <div class="row">
-      <select id="format" name="format" required>
-        {% for opt in ["Blu-ray","4K UHD","DVD"] %}
-          <option value="{{opt}}" {% if prefill_format==opt %}selected{% endif %}>{{opt}}</option>
-        {% endfor %}
-      </select>
-
-      <button type="button" onclick="tmdbSearch()">Sök på TMDB</button>
-    </div>
-
-    <div id="tmdb_results" class="results"></div>
-
-    <button type="submit">Lägg till</button>
-  </form>
-
+  </div>
+  
   <div class="grid">
     {% for m in movies %}
-      <div class="tile">
+      <div class="tile" data-title="{{ (m[1] or '')|lower }}" data-year="{{ (m[3] or '') }}" data-format="{{ (m[2] or '')|lower }}">
         <div class="posterwrap">
           {% if m[4] %}
             <img src="poster/{{m[4]}}" alt="">
@@ -229,12 +332,15 @@ HTML = """
           <span class="badge">{{m[2]}}</span>
           <span class="muted">{{m[3] or ""}}</span>
         </div>
-        <form onsubmit="return deleteMovie(this);"
-              method="post"
-              action="delete/{{m[0]}}"
-              style="margin-top:8px;">
-          <button type="submit" class="danger">Ta bort</button>
-        </form>
+        
+        {% if manage_mode %}
+          <form onsubmit="return deleteMovie(this);"
+                method="post"
+                action="delete/{{m[0]}}"
+                style="margin-top:8px;">
+            <button type="submit" class="danger">Ta bort</button>
+          </form>
+        {% endif %}
                
       </div>
     {% endfor %}
@@ -287,17 +393,6 @@ async function tmdbSearch() {
 }
 
 
-async function useTmdb(id) {
-  const res = await fetch(`tmdb/movie/${id}`);
-  const data = await res.json();
-  if (!res.ok) return;
-
-  document.getElementById("tmdb_id").value = id;
-  document.getElementById("title").value = data.title || "";
-  document.getElementById("year").value = data.year || "";
-  document.getElementById("tmdb_results").innerHTML = `<div class="muted">Vald: ${data.title} (${data.year||""})</div>`;
-}
-
 async function addFromTmdb(id) {
   const fmt = document.getElementById("format").value;
   const res = await fetch(`tmdb/add/${id}`, {
@@ -349,6 +444,141 @@ async function deleteMovie(formEl) {
   }
   return false; // stoppa normal form-submit/redirect
 }
+
+function norm(s){
+  return (s || "")
+    .toString()
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // åäö-hantering-ish
+    .trim();
+}
+
+// Enkel fuzzy: matcha query som "subsequence" i text och ge score
+function fuzzyScore(text, query){
+  text = norm(text);
+  query = norm(query);
+  if (!query) return 1;
+
+  let ti = 0;
+  let score = 0;
+  let streak = 0;
+
+  for (let qi = 0; qi < query.length; qi++){
+    const qc = query[qi];
+    let found = false;
+    while (ti < text.length){
+      if (text[ti] === qc){
+        found = true;
+        streak += 1;
+        score += 10 * streak; // belöna sammanhängande träffar
+        ti += 1;
+        break;
+      } else {
+        streak = 0;
+        ti += 1;
+      }
+    }
+    if (!found) return 0;
+  }
+
+  // Bonus om query är prefix i något ord
+  if (text.split(/\s+/).some(w => w.startsWith(query))) score += 30;
+
+  return score;
+}
+
+function filterLibrary(){
+  const q = document.getElementById("lib_search").value;
+  const tiles = Array.from(document.querySelectorAll(".grid .tile"));
+  const hint = document.getElementById("search_hint");
+
+  if (!q.trim()){
+    tiles.forEach(t => { t.style.display = ""; t.style.order = ""; });
+    hint.style.display = "none";
+    return;
+  }
+
+  let shown = 0;
+
+  tiles.forEach(t => {
+    const title = t.dataset.title || "";
+    const year = t.dataset.year || "";
+    const fmt  = t.dataset.format || "";
+
+    const hay = `${title} ${year} ${fmt}`;
+    const s = fuzzyScore(hay, q);
+
+    if (s > 0){
+      t.style.display = "";
+      // sortera “bäst match” först via flex/grid order
+      t.style.order = String(1000000 - s);
+      shown += 1;
+    } else {
+      t.style.display = "none";
+      t.style.order = "";
+    }
+  });
+
+  hint.style.display = "";
+  hint.textContent = `${shown} träff${shown===1?"":"ar"} i samlingen`;
+}
+
+function wireLibrarySearch(){
+  const inp = document.getElementById("lib_search");
+  if (!inp) return;
+  inp.addEventListener("input", filterLibrary);
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { inp.value = ""; filterLibrary(); }
+  });
+}
+document.addEventListener("DOMContentLoaded", wireLibrarySearch);
+
+function openAddModal(){
+  const m = document.getElementById("addModal");
+  m.classList.add("open");
+  m.setAttribute("aria-hidden", "false");
+
+  // fokus på titel
+  setTimeout(() => {
+    const t = document.getElementById("title");
+    if (t) t.focus();
+  }, 0);
+}
+
+function closeAddModal(){
+  const m = document.getElementById("addModal");
+  m.classList.remove("open");
+  m.setAttribute("aria-hidden", "true");
+}
+
+async function addMovie(formEl){
+  try{
+    const res = await fetch(formEl.action, {
+      method: "POST",
+      body: new FormData(formEl)
+    });
+
+    if (res.ok){
+      closeAddModal();
+      window.location.reload();
+    } else {
+      alert("Kunde inte lägga till (HTTP " + res.status + ").");
+    }
+  } catch(e){
+    alert("Nätverksfel vid tillägg.");
+  }
+  return false;
+}
+
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape"){
+    const m = document.getElementById("addModal");
+    if (m && m.classList.contains("open")) closeAddModal();
+  }
+});
+
+
 
 </script>
 </body>
@@ -431,8 +661,15 @@ def delete_movie(movie_id: int):
 
 @app.route("/")
 def home():
-    return render_template_string(HTML, movies=get_all_movies(), error=None,
-                                  prefill_title=None, prefill_year=None, prefill_format="Blu-ray")
+    return render_template_string(
+        HTML,
+        movies=get_all_movies(),
+        error=None,
+        prefill_title=None,
+        prefill_year=None,
+        prefill_format="Blu-ray",
+        manage_mode=False
+    )
 
 @app.route("/add", methods=["POST"])
 def add():
@@ -475,7 +712,7 @@ def add():
         )
 
     conn.close()
-    return redirect(url_for("home"))
+    return ("", 204)
 
 @app.route("/tmdb/add/<int:movie_id>", methods=["POST"])
 def tmdb_add(movie_id: int):
@@ -601,6 +838,18 @@ def tmdb_movie(movie_id: int):
     date = j.get("release_date") or ""
     year = date.split("-")[0] if date else ""
     return jsonify({"title": title, "year": year})
+
+@app.route("/manage")
+def manage():
+    return render_template_string(
+        HTML,
+        movies=get_all_movies(),
+        error=None,
+        prefill_title=None,
+        prefill_year=None,
+        prefill_format="Blu-ray",
+        manage_mode=True
+    )
 
 if __name__ == "__main__":
     os.makedirs("/config", exist_ok=True)
