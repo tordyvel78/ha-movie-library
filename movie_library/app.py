@@ -2,8 +2,10 @@ import os, sqlite3
 import requests
 from flask import Flask, request, jsonify, render_template_string, redirect, url_for
 from time import time
+from pathlib import Path
+from urllib.parse import urlparse
+from flask import send_from_directory
 
-# this is a test
 
 app = Flask(__name__)
 DB_PATH = "/config/movies.db"
@@ -105,6 +107,11 @@ def tmdb_search_enriched():
 
     return jsonify({"results": out})
 
+@app.route("/poster/<path:filename>")
+def poster(filename: str):
+    posters_dir = Path("/config/movie_library/posters")
+    return send_from_directory(posters_dir, filename)
+
 HTML = """
 <!doctype html>
 <html lang="sv">
@@ -124,6 +131,31 @@ HTML = """
     .card { border: 1px solid #3333; border-radius: 10px; padding: 10px; margin: 8px 0; }
     .muted { opacity: .7; }
     .err { color: #b00020; font-weight: 600; }
+    
+    .grid {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 14px;
+    }
+    .tile { border: 1px solid #3333; border-radius: 12px; padding: 10px; }
+    .posterwrap { position: relative; }
+    .posterwrap img { width: 100%; border-radius: 10px; display:block; }
+    .poster_placeholder { width:100%; aspect-ratio: 2/3; background:#0001; border-radius: 10px; }
+    .rating {
+      position: absolute;
+      top: 8px; right: 8px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      border: 1px solid #fff6;
+      background: rgba(0,0,0,.55);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .title { margin-top: 8px; font-weight: 700; font-size: 14px; line-height: 1.2; }
+    .meta { margin-top: 6px; display:flex; justify-content: space-between; gap:8px; align-items: baseline; }
+    .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; border:1px solid #3333; }
+    
   </style>
 </head>
 <body>
@@ -155,14 +187,29 @@ HTML = """
     <button type="submit">Lägg till</button>
   </form>
 
-  <table>
-    <thead><tr><th>Titel</th><th>Format</th><th>År</th></tr></thead>
-    <tbody>
-      {% for m in movies %}
-        <tr><td>{{m[1]}}</td><td>{{m[2]}}</td><td>{{m[3] if m[3] else ""}}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="grid">
+    {% for m in movies %}
+      <div class="tile">
+        <div class="posterwrap">
+          {% if m[4] %}
+            <img src="/poster/{{m[4]}}" alt="">
+          {% else %}
+            <div class="poster_placeholder"></div>
+          {% endif %}
+  
+          {% if m[5] %}
+            <div class="rating">★ {{ "%.1f"|format(m[5]) }}</div>
+          {% endif %}
+        </div>
+  
+        <div class="title">{{m[1]}}</div>
+        <div class="meta">
+          <span class="badge">{{m[2]}}</span>
+          <span class="muted">{{m[3] or ""}}</span>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
 
 <script>
 async function tmdbSearch() {
@@ -264,6 +311,15 @@ document.addEventListener("DOMContentLoaded", wireEnterToSearch);
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+    
+    # Migrera: poster_file + vote
+    c.execute("PRAGMA table_info(movies)")
+    cols = [row[1] for row in c.fetchall()]
+    if "poster_file" not in cols:
+        c.execute("ALTER TABLE movies ADD COLUMN poster_file TEXT")
+    if "vote" not in cols:
+        c.execute("ALTER TABLE movies ADD COLUMN vote REAL")
+    
 
     # Skapa tabell om den inte finns (ny installation)
     c.execute("""
@@ -295,7 +351,7 @@ def init_db():
 def get_all_movies():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT id, title, format, year FROM movies ORDER BY title COLLATE NOCASE")
+    c.execute("SELECT id, title, format, year, poster_file, vote FROM movies ORDER BY title COLLATE NOCASE")
     rows = c.fetchall()
     conn.close()
     return rows
@@ -366,13 +422,34 @@ def tmdb_add(movie_id: int):
     year = int(date.split("-")[0]) if date and date[:4].isdigit() else None
 
     fmt = (request.form.get("format") or "Blu-ray").strip()
+    
+    vote = j.get("vote_average")  # float
+    poster_path = j.get("poster_path")  # t.ex. "/abc123.jpg"
+    
+    poster_file = None
+    if poster_path:
+        posters_dir = Path("/config/movie_library/posters")
+        posters_dir.mkdir(parents=True, exist_ok=True)
+    
+        # behåll filändelsen (.jpg/.png) om den finns
+        ext = Path(urlparse(poster_path).path).suffix or ".jpg"
+        poster_file = f"tmdb_{movie_id}{ext}"
+        dest = posters_dir / poster_file
+    
+        # TMDB image CDN (w342 är bra balans)
+        img_url = f"https://image.tmdb.org/t/p/w342{poster_path}"
+        ir = requests.get(img_url, timeout=15)
+        if ir.status_code == 200:
+            dest.write_bytes(ir.content)
+        else:
+            poster_file = None
 
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     try:
         c.execute(
-            "INSERT INTO movies (title, format, year, tmdb_id) VALUES (?, ?, ?, ?)",
-            (title, fmt, year, movie_id)
+            "INSERT INTO movies (title, format, year, tmdb_id, poster_file, vote) VALUES (?, ?, ?, ?, ?, ?)",
+            (title, fmt, year, movie_id, poster_file, vote)
         )
         conn.commit()
     except sqlite3.IntegrityError:
