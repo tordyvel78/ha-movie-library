@@ -187,7 +187,7 @@ HTML = """
     <div class="err">{{error}}</div>
   {% endif %}
 
-  <form method="post" action="/add">
+  <form method="post" action="add">
     <div class="row">
       <input id="title" name="title" placeholder="Titel" required value="{{prefill_title or ''}}">
       <input id="year" name="year" placeholder="År" type="number" min="1888" max="2100" value="{{prefill_year or ''}}">
@@ -230,7 +230,7 @@ HTML = """
           <span class="muted">{{m[3] or ""}}</span>
         </div>
         <form method="post"
-              action="/delete/{{m[0]}}"
+              action="delete/{{m[0]}}"
               onsubmit="return confirm('Ta bort {{m[1]}}?');"
               style="margin-top:8px;">
           <button type="submit" class="danger">Ta bort</button>
