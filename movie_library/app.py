@@ -229,12 +229,13 @@ HTML = """
           <span class="badge">{{m[2]}}</span>
           <span class="muted">{{m[3] or ""}}</span>
         </div>
-        <form method="post"
+        <form onsubmit="return deleteMovie(this);"
+              method="post"
               action="delete/{{m[0]}}"
-              onsubmit="return confirm('Ta bort {{m[1]}}?');"
               style="margin-top:8px;">
           <button type="submit" class="danger">Ta bort</button>
-        </form>        
+        </form>
+               
       </div>
     {% endfor %}
   </div>
@@ -331,6 +332,24 @@ function wireEnterToSearch() {
 }
 document.addEventListener("DOMContentLoaded", wireEnterToSearch);
 
+async function deleteMovie(formEl) {
+  const ok = confirm("Ta bort filmen?");
+  if (!ok) return false;
+
+  try {
+    const res = await fetch(formEl.action, { method: "POST" });
+    if (res.ok) {
+      // Ladda om nuvarande sida (med rätt ingress-prefix)
+      window.location.reload();
+    } else {
+      alert("Kunde inte ta bort (HTTP " + res.status + ").");
+    }
+  } catch (e) {
+    alert("Nätverksfel vid borttagning.");
+  }
+  return false; // stoppa normal form-submit/redirect
+}
+
 </script>
 </body>
 </html>
@@ -407,7 +426,7 @@ def delete_movie(movie_id: int):
         except Exception:
             pass
 
-    return redirect(request.referrer or "../../")
+    return ("", 204)
 
 
 @app.route("/")
