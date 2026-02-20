@@ -401,6 +401,35 @@ HTML = """
     }
     .toolbar__button { cursor:pointer; }
     
+    .watched-btn {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      background: rgba(0,0,0,.6);
+      border: none;
+      color: white;
+      font-size: 16px;
+      padding: 4px 6px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    
+    .tile[data-watched="1"] {
+      opacity: 0.6;
+    }
+    
+    .tile[data-watched="1"]::after {
+      content: "✓ SETT";
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      background: rgba(0,0,0,.7);
+      color: #4caf50;
+      font-size: 12px;
+      padding: 4px 6px;
+      border-radius: 6px;
+    }
+    
   </style>
   
 </head>
@@ -555,6 +584,7 @@ HTML = """
            data-year="{{ (m[3] or '') }}"
            data-vote="{{ (m[5] if m[5] is not none else '') }}"
            data-added="{{ (m[6] or '') }}"
+           data-watched="{{ m[7] }}"
            data-format="{{ (m[2] or '')|lower }}">
         <div class="posterwrap">
           {% if m[4] %}
@@ -581,6 +611,11 @@ HTML = """
                 style="margin-top:8px;">
             <button type="submit" class="danger">Ta bort</button>
           </form>
+          <button class="watched-btn"
+                  onclick="toggleWatched({{m[0]}}, this)"
+                  title="Markera som sett">
+            👁
+          </button>
         {% endif %}
                
       </div>
@@ -944,6 +979,18 @@ async function showMovieDetails(movieRowId){
   }
 }
 
+async function toggleWatched(id, btn) {
+  await fetch(`/toggle_watched/${id}`, {
+    method: "POST"
+  });
+
+  const tile = btn.closest(".tile");
+  const current = tile.dataset.watched === "1" ? "1" : "0";
+  const next = current === "1" ? "0" : "1";
+
+  tile.dataset.watched = next;
+}
+
 function wireTileClicks(){
   document.querySelectorAll(".grid .tile").forEach(tile => {
     tile.addEventListener("click", (e) => {
@@ -1119,6 +1166,8 @@ def init_db():
         c.execute("ALTER TABLE movies ADD COLUMN added_at TEXT")
         # Sätt added_at på befintliga rader om du vill:
         c.execute("UPDATE movies SET added_at = COALESCE(added_at, datetime('now'))")
+    if "watched" not in cols:
+      c.execute("ALTER TABLE movies ADD COLUMN watched INTEGER DEFAULT 0")
     
     # Skapa tabell om den inte finns (ny installation)
     c.execute("""
@@ -1150,10 +1199,21 @@ def init_db():
 def get_all_movies():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT id, title, format, year, poster_file, vote, added_at FROM movies ORDER BY title COLLATE NOCASE")
+    c.execute("SELECT id, title, format, year, poster_file, vote, added_at, watched FROM movies ORDER BY title COLLATE NOCASE")
     rows = c.fetchall()
     conn.close()
     return rows
+
+@app.post("/toggle_watched/<int:movie_id>")
+def toggle_watched(movie_id):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    c.execute("UPDATE movies SET watched = CASE watched WHEN 1 THEN 0 ELSE 1 END WHERE id = ?", (movie_id,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"status": "ok"})
 
 @app.route("/delete/<int:movie_id>", methods=["POST"])
 def delete_movie(movie_id: int):
