@@ -126,8 +126,10 @@ def api_movies():
 
 @app.route("/poster/<path:filename>")
 def poster(filename: str):
-    posters_dir = Path("/config/movie_library/posters")
-    return send_from_directory(posters_dir, filename, cache_timeout=86400)
+    posters_dir = "/config/movie_library/posters"  # str, inte Path
+    resp = send_from_directory(posters_dir, filename)
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
 
 HTML = """
 <!doctype html>
