@@ -107,10 +107,27 @@ def tmdb_search_enriched():
 
     return jsonify({"results": out})
 
+@app.get("/api/movies")
+def api_movies():
+    rows = get_all_movies()
+    out = []
+    for m in rows:
+        out.append({
+            "id": m[0],
+            "title": m[1],
+            "format": m[2],
+            "year": m[3],
+            "poster_file": m[4],
+            "vote": m[5],
+            "added_at": m[6],
+            "watched": m[7],
+        })
+    return jsonify({"movies": out})
+
 @app.route("/poster/<path:filename>")
 def poster(filename: str):
     posters_dir = Path("/config/movie_library/posters")
-    return send_from_directory(posters_dir, filename)
+    return send_from_directory(posters_dir, filename, cache_timeout=86400)
 
 HTML = """
 <!doctype html>
@@ -163,6 +180,24 @@ HTML = """
       background: rgba(255,255,255,.04);
       backdrop-filter: blur(2px);
       transition: transform .12s ease, box-shadow .12s ease;
+    }
+    
+    .tile[data-watched="1"] {
+      opacity: 0.65;
+    }
+    
+    .tile[data-watched="1"] .posterwrap::after {
+      content: "✓ SETT";
+      position: absolute;
+      left: 8px;
+      bottom: 8px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      background: rgba(0,0,0,.65);
+      color: #7CFF9B;
+      border: 1px solid rgba(124,255,155,.35);
     }
     
     .tile:hover{
@@ -414,22 +449,6 @@ HTML = """
       cursor: pointer;
     }
     
-    .tile[data-watched="1"] {
-      opacity: 0.6;
-    }
-    
-    .tile[data-watched="1"]::after {
-      content: "✓ SETT";
-      position: absolute;
-      bottom: 8px;
-      left: 8px;
-      background: rgba(0,0,0,.7);
-      color: #4caf50;
-      font-size: 12px;
-      padding: 4px 6px;
-      border-radius: 6px;
-    }
-    
   </style>
   
 </head>
@@ -481,8 +500,7 @@ HTML = """
           <div class="section-title">Sök på TMDB</div>
         
           <div class="tmdb-search-row">
-            <input id="title"
-                   name="title"
+            <input id="tmdb_query"
                    placeholder="Filmtitel…"
                    autocomplete="off">
         
@@ -588,13 +606,26 @@ HTML = """
            data-format="{{ (m[2] or '')|lower }}">
         <div class="posterwrap">
           {% if m[4] %}
-            <img src="poster/{{m[4]}}" alt="">
+            <img
+              src="poster/{{m[4]}}"
+              alt=""
+              loading="lazy"
+              decoding="async"
+              fetchpriority="low"
+            >
           {% else %}
             <div class="poster_placeholder"></div>
           {% endif %}
   
-          {% if m[5] %}
+          {% if m[5] is not none %}
             <div class="rating">★ {{ "%.1f"|format(m[5]) }}</div>
+          {% endif %}
+          {% if manage_mode %}
+            <button class="watched-btn"
+                    onclick="toggleWatched({{m[0]}}, this); event.stopPropagation();"
+                    title="Markera som sett">
+              👁
+            </button>
           {% endif %}
         </div>
   
@@ -611,11 +642,6 @@ HTML = """
                 style="margin-top:8px;">
             <button type="submit" class="danger">Ta bort</button>
           </form>
-          <button class="watched-btn"
-                  onclick="toggleWatched({{m[0]}}, this)"
-                  title="Markera som sett">
-            👁
-          </button>
         {% endif %}
                
       </div>
@@ -624,7 +650,7 @@ HTML = """
 
 <script>
 async function tmdbSearch() {
-  const q = document.getElementById("title").value.trim();
+  const q = document.getElementById("tmdb_query").value.trim();
   const box = document.getElementById("tmdb_results");
   box.innerHTML = "";
 
@@ -716,7 +742,7 @@ async function addFromTmdb(id) {
 
 
 function wireEnterToSearch() {
-  const title = document.getElementById("title");
+  const title = document.getElementById("tmdb_query");
   title.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();   // stoppar form submit
@@ -838,7 +864,7 @@ function openAddModal(){
   m.setAttribute("aria-hidden", "false");
 
   // ===== Rensa TMDB-sök =====
-  const tmdbInput = document.getElementById("title");
+  const tmdbInput = document.getElementById("tmdb_query");
   if (tmdbInput) tmdbInput.value = "";
 
   const results = document.getElementById("tmdb_results");
@@ -907,20 +933,87 @@ async function addMovie(formEl){
   return false;
 }
 
+function escapeHtml(s){
+  return (s ?? "").toString()
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#39;");
+}
+
+function tileHtml(m, manageMode){
+  const id = m.id;
+  const title = m.title || "";
+  const year = m.year ?? "";
+  const fmt = (m.format || "");
+  const fmtLower = fmt.toLowerCase();
+  const vote = (m.vote === null || m.vote === undefined) ? null : Number(m.vote);
+  const poster = m.poster_file ? `poster/${encodeURIComponent(m.poster_file)}` : "";
+  const watched = (m.watched === 1 || m.watched === "1") ? "1" : "0";
+
+  // Obs: data-title sparas original, vi normaliserar vid sort/filter i JS
+  return `
+    <div class="tile"
+         data-id="${id}"
+         data-title="${escapeHtml(title)}"
+         data-year="${escapeHtml(year)}"
+         data-vote="${vote == null ? "" : vote}"
+         data-added="${escapeHtml(m.added_at || "")}"
+         data-watched="${watched}"
+         data-format="${escapeHtml(fmtLower)}">
+      <div class="posterwrap">
+        ${poster
+          ? `<img src="${poster}" alt="" loading="lazy" decoding="async" fetchpriority="low">`
+          : `<div class="poster placeholder"></div>`
+        }
+        ${vote != null ? `<div class="rating">★ ${vote.toFixed(1)}</div>` : ``}
+        ${manageMode ? `
+          <button class="watched-btn"
+                  onclick="toggleWatched(${id}, this); event.stopPropagation();"
+                  title="Markera som sett">👁</button>
+        ` : ``}
+      </div>
+
+      <div class="title">${escapeHtml(title)}</div>
+      <div class="meta">
+        <span class="badge">${escapeHtml(fmt)}</span>
+        <span class="muted">${escapeHtml(year)}</span>
+      </div>
+
+      ${manageMode ? `
+        <form method="post" action="delete/${id}" onsubmit="return confirm('Ta bort?');">
+          <button class="danger" type="submit">Ta bort</button>
+        </form>
+      ` : ``}
+    </div>
+  `;
+}
+
 async function refreshLibraryGrid(){
-  const res = await fetch(window.location.href, { cache: "no-store" });
-  const html = await res.text();
-
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  const newGrid = doc.querySelector(".grid");
   const curGrid = document.querySelector(".grid");
+  if (!curGrid) return;
 
-  if (newGrid && curGrid){
-    curGrid.innerHTML = newGrid.innerHTML;
-  }
+  // manage_mode finns redan i templaten som Jinja-boolean
+  const manageMode = {{ 'true' if manage_mode else 'false' }};
 
-  if (typeof filterLibrary === "function") filterLibrary();
+  const res = await fetch("api/movies", { cache: "no-store" });
+  if (!res.ok) return;
+
+  const data = await res.json();
+  const movies = Array.isArray(data.movies) ? data.movies : [];
+
+  // Bygg HTML i minnet och byt i ett svep
+  curGrid.innerHTML = movies.map(m => tileHtml(m, manageMode)).join("");
+
+  // Re-wire tile klick (öppna modal) + behåll din filter/sort om du vill
   wireTileClicks();
+
+  // Om du använder sorteringen som sätter order: kör om den efter refresh
+  if (typeof sortGridTiles === "function") sortGridTiles();
+
+  // Om du använder filterLibrary() (sök i samlingen): applicera igen
+  if (typeof filterLibrary === "function") filterLibrary();
 }
 
 function openMovieModal(){
@@ -980,7 +1073,7 @@ async function showMovieDetails(movieRowId){
 }
 
 async function toggleWatched(id, btn) {
-  await fetch(`/toggle_watched/${id}`, {
+  await fetch(`toggle_watched/${id}`, {
     method: "POST"
   });
 
@@ -994,8 +1087,8 @@ async function toggleWatched(id, btn) {
 function wireTileClicks(){
   document.querySelectorAll(".grid .tile").forEach(tile => {
     tile.addEventListener("click", (e) => {
-      // Om man klickar på delete-knappen i manage-läge: låt den vara
       if (e.target && e.target.closest && e.target.closest("form")) return;
+      if (e.target && e.target.closest && e.target.closest(".watched-btn")) return;
 
       const id = tile.dataset.id;
       if (id) showMovieDetails(id);
@@ -1155,6 +1248,17 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     
+    # Skapa tabell om den inte finns (ny installation)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS movies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            format TEXT NOT NULL,
+            year INTEGER,
+            tmdb_id INTEGER
+        )
+    """)    
+    
     # Migrera: poster_file + vote
     c.execute("PRAGMA table_info(movies)")
     cols = [row[1] for row in c.fetchall()]
@@ -1169,17 +1273,6 @@ def init_db():
     if "watched" not in cols:
       c.execute("ALTER TABLE movies ADD COLUMN watched INTEGER DEFAULT 0")
     
-    # Skapa tabell om den inte finns (ny installation)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS movies (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            format TEXT NOT NULL,
-            year INTEGER,
-            tmdb_id INTEGER
-        )
-    """)
-
     # Migrera: lägg till kolumnen tmdb_id om den saknas
     c.execute("PRAGMA table_info(movies)")
     cols = [row[1] for row in c.fetchall()]
@@ -1329,8 +1422,8 @@ def tmdb_add(movie_id: int):
         poster_file = f"tmdb_{movie_id}{ext}"
         dest = posters_dir / poster_file
     
-        # TMDB image CDN (w342 är bra balans)
-        img_url = f"https://image.tmdb.org/t/p/w342{poster_path}"
+        # TMDB image CDN
+        img_url = f"https://image.tmdb.org/t/p/w185{poster_path}"
         ir = requests.get(img_url, timeout=15)
         if ir.status_code == 200:
             dest.write_bytes(ir.content)
@@ -1351,58 +1444,6 @@ def tmdb_add(movie_id: int):
 
     conn.close()
     return jsonify({"status": "added"}), 200
-
-
-@app.route("/tmdb/search")
-def tmdb_search():
-    headers, err = tmdb_headers()
-    if err:
-        return jsonify({"error": err}), 400
-
-    q = (request.args.get("q") or "").strip()
-    if not q:
-        return jsonify({"results": []})
-
-    url = "https://api.themoviedb.org/3/search/movie"
-    params = {
-        "query": q,
-        "language": tmdb_language(),
-        "include_adult": "false"
-    }
-
-    r = requests.get(url, headers=headers, params=params, timeout=10)
-    if r.status_code != 200:
-        return jsonify({"error": f"TMDB-sök misslyckades ({r.status_code})"}), 502
-
-    j = r.json()
-    out = []
-
-    for item in j.get("results", [])[:20]:
-        title = item.get("title") or ""
-        original_title = item.get("original_title") or ""
-        date = item.get("release_date") or ""
-        year = date.split("-")[0] if date else ""
-        overview = item.get("overview") or ""
-        vote = item.get("vote_average")
-        poster = item.get("poster_path")
-
-        poster_url = (
-            f"https://image.tmdb.org/t/p/w185{poster}"
-            if poster else None
-        )
-
-        out.append({
-            "id": item.get("id"),
-            "title": title,
-            "original_title": original_title,
-            "year": year,
-            "overview": overview,
-            "vote": vote,
-            "poster": poster_url
-        })
-
-    return jsonify({"results": out})
-
 
 @app.route("/tmdb/movie/<int:movie_id>")
 def tmdb_movie(movie_id: int):
