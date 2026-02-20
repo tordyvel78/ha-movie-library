@@ -536,8 +536,10 @@ HTML = """
     {% for m in movies %}
       <div class="tile"
            data-id="{{m[0]}}"
-           data-title="{{ (m[1] or '')|lower }}"
+           data-title="{{ (m[1] or '') }}"
            data-year="{{ (m[3] or '') }}"
+           data-vote="{{ (m[5] if m[5] is not none else '') }}"
+           data-added="{{ (m[6] or '') }}"
            data-format="{{ (m[2] or '')|lower }}">
         <div class="posterwrap">
           {% if m[4] %}
@@ -951,86 +953,137 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-const collatorSV = new Intl.Collator("sv", { sensitivity: "base" });
+(function(){
+  const collatorSV = new Intl.Collator("sv", { sensitivity: "base" });
 
-function getSortState() {
-  return {
-    by: localStorage.getItem("ml_sort_by") || "title",
-    dir: localStorage.getItem("ml_sort_dir") || "asc", // asc|desc
-  };
-}
+  function getSortState() {
+    return {
+      by: localStorage.getItem("ml_sort_by") || "title",
+      dir: localStorage.getItem("ml_sort_dir") || "asc",
+    };
+  }
 
-function setSortState(by, dir) {
-  localStorage.setItem("ml_sort_by", by);
-  localStorage.setItem("ml_sort_dir", dir);
-}
+  function setSortState(by, dir) {
+    localStorage.setItem("ml_sort_by", by);
+    localStorage.setItem("ml_sort_dir", dir);
+  }
 
-function normalizeNumber(v, fallback = 0) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
+  function normTitle(s){
+    return (s || "").toString().trim();
+  }
 
-function normalizeTime(v) {
-  // Klarar ISO-string, unix (sek/ms), eller null
-  if (!v) return 0;
-  if (typeof v === "number") return v > 1e12 ? v : v * 1000; // ms vs s
-  const t = Date.parse(v);
-  return Number.isFinite(t) ? t : 0;
-}
+  function num(v, fallback){
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  }
 
-function sortMovies(movies, by, dir) {
-  const sign = dir === "desc" ? -1 : 1;
+  function timeMs(v){
+    if (!v) return 0;
+    const t = Date.parse(v);
+    return Number.isFinite(t) ? t : 0;
+  }
 
-  return [...movies].sort((a, b) => {
-    let diff = 0;
+  function updateSortUI(by, dir){
+    const sel = document.getElementById("sort_by");
+    const btn = document.getElementById("sort_dir");
+    if (!sel || !btn) return;
 
-    if (by === "title") {
-      diff = collatorSV.compare(a.title || "", b.title || "");
-    } else if (by === "year") {
-      diff = normalizeNumber(a.year) - normalizeNumber(b.year);
-    } else if (by === "rating") {
-      // Om rating saknas: hamna sist vid desc (högst först)
-      const ar = a.rating == null ? -1 : normalizeNumber(a.rating, -1);
-      const br = b.rating == null ? -1 : normalizeNumber(b.rating, -1);
-      diff = ar - br;
-    } else if (by === "added_at") {
-      diff = normalizeTime(a.added_at) - normalizeTime(b.added_at);
+    sel.value = by;
+    btn.textContent =
+      by === "title"
+        ? (dir === "asc" ? "A→Ö" : "Ö→A")
+        : (dir === "asc" ? "↑" : "↓");
+  }
+
+  function sortGridTiles(){
+    const { by, dir } = getSortState();
+    const sign = dir === "desc" ? -1 : 1;
+
+    const tiles = Array.from(document.querySelectorAll(".grid .tile"));
+
+    // Om användaren söker i samlingen: låt sök-rankning vinna (din filterLibrary använder order för matchscore)
+    const q = (document.getElementById("lib_search")?.value || "").trim();
+    if (q) {
+      updateSortUI(by, dir);
+      return;
     }
 
-    // Sekundärsort: alltid titel (stabil känsla)
-    if (diff === 0) diff = collatorSV.compare(a.title || "", b.title || "");
+    const ranked = tiles.map((t) => {
+      const title = normTitle(t.dataset.title);
+      const year  = num(t.dataset.year, 0);
+      const vote  = (t.dataset.vote === "" || t.dataset.vote == null) ? null : num(t.dataset.vote, 0);
+      const added = timeMs(t.dataset.added);
 
-    return diff * sign;
-  });
-}
+      // primary key
+      let key;
+      if (by === "title") key = title;
+      else if (by === "year") key = year;
+      else if (by === "rating") key = (vote == null ? -1 : vote);
+      else if (by === "added_at") key = added;
+      else key = title;
 
-function applySortAndRender(allMovies) {
-  const { by, dir } = getSortState();
-  const sorted = sortMovies(allMovies, by, dir);
-  renderMovies(sorted); // din befintliga render-funktion
-  updateSortUI(by, dir);
-}
+      return { t, title, year, vote, added, key };
+    });
 
-function updateSortUI(by, dir) {
-  document.getElementById("sort_by").value = by;
-  const btn = document.getElementById("sort_dir");
-  btn.textContent = (by === "title")
-    ? (dir === "asc" ? "A→Ö" : "Ö→A")
-    : (dir === "asc" ? "↑" : "↓");
-}
+    ranked.sort((a, b) => {
+      let diff = 0;
 
-document.getElementById("sort_by").addEventListener("change", (e) => {
-  const { dir } = getSortState();
-  setSortState(e.target.value, dir);
-  applySortAndRender(window.MOVIES); // eller var du har listan
-});
+      if (by === "title") {
+        diff = collatorSV.compare(a.title, b.title);
+      } else if (by === "year") {
+        diff = (a.year - b.year);
+      } else if (by === "rating") {
+        diff = ((a.vote == null ? -1 : a.vote) - (b.vote == null ? -1 : b.vote));
+      } else if (by === "added_at") {
+        diff = (a.added - b.added);
+      }
 
-document.getElementById("sort_dir").addEventListener("click", () => {
-  const { by, dir } = getSortState();
-  const next = dir === "asc" ? "desc" : "asc";
-  setSortState(by, next);
-  applySortAndRender(window.MOVIES);
-});
+      // sekundärsort: alltid titel
+      if (diff === 0) diff = collatorSV.compare(a.title, b.title);
+
+      return diff * sign;
+    });
+
+    // Applicera ordning via CSS order (funkar fint med CSS grid)
+    ranked.forEach((x, i) => {
+      x.t.style.order = String(i);
+    });
+
+    updateSortUI(by, dir);
+  }
+
+  function initSort(){
+    const sel = document.getElementById("sort_by");
+    const btn = document.getElementById("sort_dir");
+    if (!sel || !btn) return;
+
+    sel.addEventListener("change", (e) => {
+      const { dir } = getSortState();
+      setSortState(e.target.value, dir);
+      sortGridTiles();
+    });
+
+    btn.addEventListener("click", () => {
+      const { by, dir } = getSortState();
+      setSortState(by, dir === "asc" ? "desc" : "asc");
+      sortGridTiles();
+    });
+
+    sortGridTiles();
+  }
+
+  document.addEventListener("DOMContentLoaded", initSort);
+
+  // Kör om sort efter att du uppdaterat griden (refreshLibraryGrid)
+  const _oldRefresh = window.refreshLibraryGrid;
+  if (typeof _oldRefresh === "function") {
+    window.refreshLibraryGrid = async function(){
+      await _oldRefresh();
+      sortGridTiles();
+    };
+  }
+})();
+
 </script>
 </body>
 </html>
@@ -1047,8 +1100,11 @@ def init_db():
         c.execute("ALTER TABLE movies ADD COLUMN poster_file TEXT")
     if "vote" not in cols:
         c.execute("ALTER TABLE movies ADD COLUMN vote REAL")
+    if "added_at" not in cols:
+        c.execute("ALTER TABLE movies ADD COLUMN added_at TEXT")
+        # Sätt added_at på befintliga rader om du vill:
+        c.execute("UPDATE movies SET added_at = COALESCE(added_at, datetime('now'))")
     
-
     # Skapa tabell om den inte finns (ny installation)
     c.execute("""
         CREATE TABLE IF NOT EXISTS movies (
@@ -1079,7 +1135,7 @@ def init_db():
 def get_all_movies():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT id, title, format, year, poster_file, vote FROM movies ORDER BY title COLLATE NOCASE")
+    c.execute("SELECT id, title, format, year, poster_file, vote, added_at FROM movies ORDER BY title COLLATE NOCASE")
     rows = c.fetchall()
     conn.close()
     return rows
@@ -1140,13 +1196,13 @@ def add():
         # Om tmdb_id finns: den är unik via index -> stoppar dublett
         if tmdb_val is not None:
             c.execute(
-                "INSERT INTO movies (title, format, year, tmdb_id) VALUES (?, ?, ?, ?)",
+                "INSERT INTO movies (title, format, year, tmdb_id, added_at) VALUES (?, ?, ?, ?, datetime('now'))",
                 (title, fmt, year_val, tmdb_val)
             )
         else:
             # Manuell: stoppa dublett via title+year+format-index
             c.execute(
-                "INSERT INTO movies (title, format, year, tmdb_id) VALUES (?, ?, ?, NULL)",
+                "INSERT INTO movies (title, format, year, tmdb_id, added_at) VALUES (?, ?, ?, NULL, datetime('now'))",
                 (title, fmt, year_val)
             )
 
@@ -1210,7 +1266,7 @@ def tmdb_add(movie_id: int):
     c = conn.cursor()
     try:
         c.execute(
-            "INSERT INTO movies (title, format, year, tmdb_id, poster_file, vote) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO movies (title, format, year, tmdb_id, poster_file, vote, added_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
             (title, fmt, year, movie_id, poster_file, vote)
         )
         conn.commit()
