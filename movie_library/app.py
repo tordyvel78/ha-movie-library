@@ -377,8 +377,14 @@ HTML = """
       display:flex;
       gap:22px;
     }
-    
-    
+
+    .toolbar { display:flex; gap:.6rem; align-items:center; margin:.75rem 0; flex-wrap:wrap; }
+    .toolbar__label { opacity:.8; font-size:.95rem; }
+    .toolbar__select, .toolbar__button {
+      padding:.45rem .6rem; border-radius:10px; border:1px solid rgba(255,255,255,.12);
+      background:rgba(0,0,0,.18); color:inherit;
+    }
+    .toolbar__button { cursor:pointer; }
     
   </style>
   
@@ -509,6 +515,21 @@ HTML = """
         </div>
       </div>
     </div>
+  </div>
+
+  <div class="toolbar">
+    <label class="toolbar__label" for="sort_by">Sortera:</label>
+
+    <select id="sort_by" class="toolbar__select">
+      <option value="title">Namn</option>
+      <option value="year">År</option>
+      <option value="rating">Betyg</option>
+      <option value="added_at">Senast inlagd</option>
+    </select>
+
+    <button id="sort_dir" class="toolbar__button" type="button" title="Växla ordning">
+      A→Ö
+    </button>
   </div>
   
   <div class="grid">
@@ -930,6 +951,86 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+const collatorSV = new Intl.Collator("sv", { sensitivity: "base" });
+
+function getSortState() {
+  return {
+    by: localStorage.getItem("ml_sort_by") || "title",
+    dir: localStorage.getItem("ml_sort_dir") || "asc", // asc|desc
+  };
+}
+
+function setSortState(by, dir) {
+  localStorage.setItem("ml_sort_by", by);
+  localStorage.setItem("ml_sort_dir", dir);
+}
+
+function normalizeNumber(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeTime(v) {
+  // Klarar ISO-string, unix (sek/ms), eller null
+  if (!v) return 0;
+  if (typeof v === "number") return v > 1e12 ? v : v * 1000; // ms vs s
+  const t = Date.parse(v);
+  return Number.isFinite(t) ? t : 0;
+}
+
+function sortMovies(movies, by, dir) {
+  const sign = dir === "desc" ? -1 : 1;
+
+  return [...movies].sort((a, b) => {
+    let diff = 0;
+
+    if (by === "title") {
+      diff = collatorSV.compare(a.title || "", b.title || "");
+    } else if (by === "year") {
+      diff = normalizeNumber(a.year) - normalizeNumber(b.year);
+    } else if (by === "rating") {
+      // Om rating saknas: hamna sist vid desc (högst först)
+      const ar = a.rating == null ? -1 : normalizeNumber(a.rating, -1);
+      const br = b.rating == null ? -1 : normalizeNumber(b.rating, -1);
+      diff = ar - br;
+    } else if (by === "added_at") {
+      diff = normalizeTime(a.added_at) - normalizeTime(b.added_at);
+    }
+
+    // Sekundärsort: alltid titel (stabil känsla)
+    if (diff === 0) diff = collatorSV.compare(a.title || "", b.title || "");
+
+    return diff * sign;
+  });
+}
+
+function applySortAndRender(allMovies) {
+  const { by, dir } = getSortState();
+  const sorted = sortMovies(allMovies, by, dir);
+  renderMovies(sorted); // din befintliga render-funktion
+  updateSortUI(by, dir);
+}
+
+function updateSortUI(by, dir) {
+  document.getElementById("sort_by").value = by;
+  const btn = document.getElementById("sort_dir");
+  btn.textContent = (by === "title")
+    ? (dir === "asc" ? "A→Ö" : "Ö→A")
+    : (dir === "asc" ? "↑" : "↓");
+}
+
+document.getElementById("sort_by").addEventListener("change", (e) => {
+  const { dir } = getSortState();
+  setSortState(e.target.value, dir);
+  applySortAndRender(window.MOVIES); // eller var du har listan
+});
+
+document.getElementById("sort_dir").addEventListener("click", () => {
+  const { by, dir } = getSortState();
+  const next = dir === "asc" ? "desc" : "asc";
+  setSortState(by, next);
+  applySortAndRender(window.MOVIES);
+});
 </script>
 </body>
 </html>
