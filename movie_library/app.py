@@ -597,9 +597,10 @@ HTML = """
       A→Ö
     </button>
     
-    <button id="filter_unwatched" class="toolbar__button" type="button">
-      Endast osedda
-    </button>
+    <label class="toolbar__check">
+      <input id="hide_watched" type="checkbox">
+      Dölj sedda
+    </label>
     
   </div>
   
@@ -1025,6 +1026,7 @@ async function refreshLibraryGrid(){
   if (typeof filterLibrary === "function") filterLibrary();
   
   applyWatchedFilter();
+  applyHideWatched();
 }
 
 function openMovieModal(){
@@ -1093,6 +1095,7 @@ async function toggleWatched(id, btn) {
   const next = current === "1" ? "0" : "1";
 
   tile.dataset.watched = next;
+  applyHideWatched();
 }
 
 function wireTileClicks(){
@@ -1243,26 +1246,30 @@ document.addEventListener("keydown", (e) => {
 
   document.addEventListener("DOMContentLoaded", initSort);
   
-  let showOnlyUnwatched = false;
-
-  function applyWatchedFilter(){
+  function applyHideWatched(){
+    const cb = document.getElementById("hide_watched");
+    if (!cb) return;
+  
+    const hide = cb.checked;
+  
     document.querySelectorAll(".grid .tile").forEach(tile => {
       const watched = tile.dataset.watched === "1";
-      if (showOnlyUnwatched && watched) {
-        tile.style.display = "none";
-      } else {
-        tile.style.display = "";
-      }
+      tile.style.display = (hide && watched) ? "none" : "";
     });
   }
   
-  document.getElementById("filter_unwatched").addEventListener("click", () => {
-    showOnlyUnwatched = !showOnlyUnwatched;
+  document.addEventListener("DOMContentLoaded", () => {
+    const cb = document.getElementById("hide_watched");
+    if (!cb) return;
   
-    const btn = document.getElementById("filter_unwatched");
-    btn.textContent = showOnlyUnwatched ? "Visa alla" : "Endast osedda";
+    cb.checked = localStorage.getItem("ml_hide_watched") === "1";
   
-    applyWatchedFilter();
+    cb.addEventListener("change", () => {
+      localStorage.setItem("ml_hide_watched", cb.checked ? "1" : "0");
+      applyHideWatched();
+    });
+  
+    applyHideWatched();
   });
 
   // Kör om sort efter att du uppdaterat griden (refreshLibraryGrid)
