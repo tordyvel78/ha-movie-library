@@ -184,10 +184,6 @@ HTML = """
       transition: transform .12s ease, box-shadow .12s ease;
     }
     
-    .tile[data-watched="1"] {
-      opacity: 0.65;
-    }
-    
     .tile[data-watched="1"] .posterwrap::after {
       content: "✓ SETT";
       position: absolute;
@@ -451,6 +447,12 @@ HTML = """
       cursor: pointer;
     }
     
+    {% if manage_mode %}
+    .grid .tile {
+      cursor: default;
+    }
+    {% endif %}
+    
   </style>
   
 </head>
@@ -594,6 +596,11 @@ HTML = """
     <button id="sort_dir" class="toolbar__button" type="button" title="Växla ordning">
       A→Ö
     </button>
+    
+    <button id="filter_unwatched" class="toolbar__button" type="button">
+      Endast osedda
+    </button>
+    
   </div>
   
   <div class="grid">
@@ -1016,6 +1023,8 @@ async function refreshLibraryGrid(){
 
   // Om du använder filterLibrary() (sök i samlingen): applicera igen
   if (typeof filterLibrary === "function") filterLibrary();
+  
+  applyWatchedFilter();
 }
 
 function openMovieModal(){
@@ -1087,6 +1096,9 @@ async function toggleWatched(id, btn) {
 }
 
 function wireTileClicks(){
+  const manageMode = {{ 'true' if manage_mode else 'false' }};
+  if (manageMode) return;  // ⬅ stoppa all tile-click i manage
+
   document.querySelectorAll(".grid .tile").forEach(tile => {
     tile.addEventListener("click", (e) => {
       if (e.target && e.target.closest && e.target.closest("form")) return;
@@ -1230,6 +1242,28 @@ document.addEventListener("keydown", (e) => {
   }
 
   document.addEventListener("DOMContentLoaded", initSort);
+  
+  let showOnlyUnwatched = false;
+
+  function applyWatchedFilter(){
+    document.querySelectorAll(".grid .tile").forEach(tile => {
+      const watched = tile.dataset.watched === "1";
+      if (showOnlyUnwatched && watched) {
+        tile.style.display = "none";
+      } else {
+        tile.style.display = "";
+      }
+    });
+  }
+  
+  document.getElementById("filter_unwatched").addEventListener("click", () => {
+    showOnlyUnwatched = !showOnlyUnwatched;
+  
+    const btn = document.getElementById("filter_unwatched");
+    btn.textContent = showOnlyUnwatched ? "Visa alla" : "Endast osedda";
+  
+    applyWatchedFilter();
+  });
 
   // Kör om sort efter att du uppdaterat griden (refreshLibraryGrid)
   const _oldRefresh = window.refreshLibraryGrid;
