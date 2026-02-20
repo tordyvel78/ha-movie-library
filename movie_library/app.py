@@ -380,8 +380,23 @@ HTML = """
 
     .toolbar { display:flex; gap:.6rem; align-items:center; margin:.75rem 0; flex-wrap:wrap; }
     .toolbar__label { opacity:.8; font-size:.95rem; }
-    .toolbar__select, .toolbar__button {
-      padding:.45rem .6rem; border-radius:10px; border:1px solid rgba(255,255,255,.12);
+    .toolbar__select {
+      padding: .45rem .6rem;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.12);
+    
+      background: rgba(20,20,20,.85);
+      color: #fff;
+    
+      font-size: .95rem;
+      outline: none;
+      cursor: pointer;
+    
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+    }
+    .toolbar__button { padding:.45rem .6rem; border-radius:10px; border:1px solid rgba(255,255,255,.12);
       background:rgba(0,0,0,.18); color:inherit;
     }
     .toolbar__button { cursor:pointer; }
