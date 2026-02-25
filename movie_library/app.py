@@ -895,6 +895,8 @@ function filterLibrary(){
     applyHideWatched();
     return;
   }
+  
+  if (typeof applyHideWatched === "function") applyHideWatched();
 
   let shown = 0;
 
@@ -1162,6 +1164,22 @@ function wireTileClicks(){
   });
 }
 
+function applyHideWatched(){
+  const cb = document.getElementById("hide_watched");
+  if (!cb) return;
+
+  // Om sök är aktiv: "Dölj sedda" ska inte gälla
+  const q = (document.getElementById("lib_search")?.value || "").trim();
+  if (q) return;
+
+  const hide = cb.checked;
+
+  document.querySelectorAll(".grid .tile").forEach(tile => {
+    const watched = tile.dataset.watched === "1";
+    tile.style.display = (hide && watched) ? "none" : "";
+  });
+}
+
 document.addEventListener("DOMContentLoaded", wireTileClicks);
 
 document.addEventListener("keydown", (e) => {
@@ -1294,22 +1312,6 @@ document.addEventListener("keydown", (e) => {
   }
 
   document.addEventListener("DOMContentLoaded", initSort);
-  
-  function applyHideWatched(){
-    const cb = document.getElementById("hide_watched");
-    if (!cb) return;
-  
-    // ✅ Om vi söker: dölj inget här. Sökningen bestämmer vad som syns.
-    const q = (document.getElementById("lib_search")?.value || "").trim();
-    if (q) return;
-  
-    const hide = cb.checked;
-  
-    document.querySelectorAll(".grid .tile").forEach(tile => {
-      const watched = tile.dataset.watched === "1";
-      tile.style.display = (hide && watched) ? "none" : "";
-    });
-  }
   
   document.addEventListener("DOMContentLoaded", () => {
     const cb = document.getElementById("hide_watched");
