@@ -1,5 +1,6 @@
 import os, sqlite3
 import requests
+from werkzeug.utils import secure_filename
 from flask import Flask, request, jsonify, render_template_string, redirect, url_for
 from time import time
 from pathlib import Path
@@ -561,6 +562,8 @@ HTML = """
             <input name="title" placeholder="Titel" required>
             <input name="year" placeholder="År" type="number" min="1888" max="2100">
           </div>
+          
+          <input type="file" name="poster_upload" accept="image/*">
         
           <input type="hidden" id="tmdb_id" name="tmdb_id">
         
@@ -962,7 +965,9 @@ function openAddModal(){
   // ===== Rensa manuella fält =====
   const manualTitle = document.querySelector('.manual input[name="title"]');
   const manualYear  = document.querySelector('.manual input[name="year"]');
-
+  const posterInp = document.querySelector('input[name="poster_upload"]');
+  
+  if (posterInp) posterInp.value = "";
   if (manualTitle) manualTitle.value = "";
   if (manualYear) manualYear.value = "";
 
@@ -1446,6 +1451,30 @@ def add():
 
     year_val = int(year) if year.isdigit() else None
     tmdb_val = int(tmdb_id) if tmdb_id.isdigit() else None
+    
+    # ===== Manuell poster-upload =====
+    poster_file = None
+    f = request.files.get("poster_upload")
+    if f and f.filename:
+        posters_dir = Path("/config/movie_library/posters")
+        posters_dir.mkdir(parents=True, exist_ok=True)
+
+        safe = secure_filename(f.filename)
+        ext = Path(safe).suffix.lower()
+
+        if ext not in [".jpg", ".jpeg", ".png", ".webp"]:
+            return render_template_string(
+                HTML,
+                movies=get_all_movies(),
+                error="Endast .jpg/.jpeg/.png/.webp stöds för poster.",
+                prefill_title=title,
+                prefill_year=year_val,
+                prefill_format=fmt
+            )
+
+        poster_file = f"manual_{int(time())}_{safe}"
+        dest = posters_dir / poster_file
+        f.save(dest)
 
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -1454,20 +1483,27 @@ def add():
         # Om tmdb_id finns: den är unik via index -> stoppar dublett
         if tmdb_val is not None:
             c.execute(
-                "INSERT INTO movies (title, format, year, tmdb_id, added_at) VALUES (?, ?, ?, ?, datetime('now'))",
-                (title, fmt, year_val, tmdb_val)
+                "INSERT INTO movies (title, format, year, tmdb_id, poster_file, added_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+                (title, fmt, year_val, tmdb_val, poster_file)
             )
         else:
             # Manuell: stoppa dublett via title+year+format-index
             c.execute(
-                "INSERT INTO movies (title, format, year, tmdb_id, added_at) VALUES (?, ?, ?, NULL, datetime('now'))",
-                (title, fmt, year_val)
+                "INSERT INTO movies (title, format, year, tmdb_id, poster_file, added_at) VALUES (?, ?, ?, NULL, ?, datetime('now'))",
+                (title, fmt, year_val, poster_file)
             )
 
         conn.commit()
     except sqlite3.IntegrityError:
-        # Dublett – gör inget och visa tillbaka sidan med fel
         conn.close()
+    
+        # Om vi hann spara en fil: städa bort vid dublett
+        if poster_file:
+            try:
+                (Path("/config/movie_library/posters") / poster_file).unlink(missing_ok=True)
+            except Exception:
+                pass
+    
         return render_template_string(
             HTML,
             movies=get_all_movies(),
