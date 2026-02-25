@@ -150,6 +150,15 @@ HTML = """
       color:#e6e6e6;
     }
     
+    body.modal-open{
+      overflow: hidden;
+    }
+    
+    body.modal-open{
+      position: fixed;
+      width: 100%;
+    }
+    
     form { display: grid; gap: 10px; max-width: 520px; }
     input, select, button { padding: 10px; font-size: 16px; }
     table { border-collapse: collapse; width: 100%; margin-top: 18px; }
@@ -298,6 +307,7 @@ HTML = """
       width: min(720px, calc(100vw - 24px));
       max-height: calc(100vh - 100px);
       overflow:auto;
+      overscroll-behavior: contain;
     
       background:#1b212c;
       border-radius:16px;
@@ -434,17 +444,37 @@ HTML = """
     }
     .toolbar__button { cursor:pointer; }
     
-    .watched-btn {
-      position: absolute;
-      top: 6px;
-      right: 6px;
-      background: rgba(0,0,0,.6);
-      border: none;
-      color: white;
-      font-size: 16px;
-      padding: 4px 6px;
-      border-radius: 6px;
-      cursor: pointer;
+    .toast{
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      background: rgba(20,20,20,.92);
+      border: 1px solid rgba(255,255,255,.12);
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 999px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.45);
+      z-index: 10000;
+      display: none;
+      font-weight: 700;
+    }
+    
+    .toast.show{ display:block; }
+    
+    .toast.ok{
+      border-color: rgba(124,255,155,.35);
+      color:#7CFF9B;
+    }
+    
+    .toast.warn{
+      border-color: rgba(255,210,0,.35);
+      color:#ffd45a;
+    }
+    
+    .toast.err{
+      border-color: rgba(255,0,0,.30);
+      color:#ff8b8b;
     }
     
   </style>
@@ -459,10 +489,14 @@ HTML = """
     </div>
   
     <div class="right" style="display:flex; gap:10px; align-items:center;">
+      <button type="button" class="iconbtn" onclick="openAddModal()" aria-label="Lägg till film" title="Lägg till film">
+        +
+      </button>
     </div>
   </div>  
   
   <div id="search_hint" class="muted" style="margin-top:8px; display:none;"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
   
 
   {% if error %}
@@ -598,7 +632,7 @@ HTML = """
       A→Ö
     </button>
     
-    <label class="toolbar__check">
+    <label id="hide_watched_wrap" class="toolbar__check">
       <input id="hide_watched" type="checkbox">
       Dölj sedda
     </label>
@@ -689,6 +723,37 @@ async function tmdbSearch() {
   `).join("");
 }
 
+let _toastTimer = null;
+
+function showToast(msg, type="ok", ms=2200){
+  const t = document.getElementById("toast");
+  if (!t) return;
+
+  t.textContent = msg;
+  t.className = `toast show ${type}`;
+
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => {
+    t.className = "toast";
+    t.textContent = "";
+  }, ms);
+}
+
+let _scrollY = 0;
+
+function lockBodyScroll(){
+  _scrollY = window.scrollY || 0;
+  document.body.classList.add("modal-open");
+  document.body.style.top = `-${_scrollY}px`;
+}
+
+function unlockBodyScroll(){
+  document.body.classList.remove("modal-open");
+  const y = _scrollY;
+  document.body.style.top = "";
+  window.scrollTo(0, y);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const cb = document.getElementById("mm_watched");
   if (!cb) return;
@@ -721,8 +786,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (res.ok){
       closeMovieModal();
       await refreshLibraryGrid();
+      showToast("Borttagen ur samlingen.", "ok", 2200);
     } else {
-      alert("Kunde inte ta bort.");
+      showToast("Kunde inte ta bort.", "err", 3200);
     }
   });
 });
@@ -745,29 +811,18 @@ async function addFromTmdb(id) {
   const data = await res.json();
 
   if (data.status === "added") {
-
+  
     await refreshLibraryGrid();
-
-    const box = document.getElementById("tmdb_results");
-    if (box){
-      const el = document.createElement("div");
-      el.className = "muted";
-      el.style.margin = "6px 0";
-      el.textContent = "Tillagd ✓";
-      box.prepend(el);
-      setTimeout(() => el.remove(), 900);
-    }
-
+    showToast("Tillagd i samlingen ✓", "ok", 2400);
+  
   } else if (data.status === "duplicate") {
-
-    document.getElementById("tmdb_results").innerHTML =
-      `<div class="muted">Finns redan i samlingen (dublett stoppad).</div>`;
-
+  
+    showToast("Finns redan i samlingen (dublett stoppad).", "warn", 2800);
+  
   } else {
-
-    document.getElementById("tmdb_results").innerHTML =
-      `<div class="err">${data.error || "Fel vid tillägg"}</div>`;
-
+  
+    showToast(data.error || "Fel vid tillägg", "err", 3200);
+  
   }
 }
 
@@ -826,6 +881,7 @@ function fuzzyScore(text, query){
 }
 
 function filterLibrary(){
+  updateHideWatchedVisibility();
   const q = document.getElementById("lib_search").value;
   const tiles = Array.from(document.querySelectorAll(".grid .tile"));
   const hint = document.getElementById("search_hint");
@@ -864,6 +920,15 @@ function filterLibrary(){
   applyHideWatched();
 }
 
+function updateHideWatchedVisibility(){
+  const wrap = document.getElementById("hide_watched_wrap");
+  const q = (document.getElementById("lib_search")?.value || "").trim();
+  if (!wrap) return;
+
+  // Om man söker: göm "Dölj sedda"
+  wrap.style.display = q ? "none" : "";
+}
+
 function wireLibrarySearch(){
   const inp = document.getElementById("lib_search");
   if (!inp) return;
@@ -871,10 +936,14 @@ function wireLibrarySearch(){
   inp.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { inp.value = ""; filterLibrary(); }
   });
+  updateHideWatchedVisibility();
 }
+
 document.addEventListener("DOMContentLoaded", wireLibrarySearch);
 
 function openAddModal(){
+  lockBodyScroll();
+
   const m = document.getElementById("addModal");
   m.classList.add("open");
   m.setAttribute("aria-hidden", "false");
@@ -915,6 +984,8 @@ function closeAddModal(){
   const m = document.getElementById("addModal");
   m.classList.remove("open");
   m.setAttribute("aria-hidden", "true");
+
+  unlockBodyScroll();
 }
 
 async function addMovie(formEl){
@@ -928,23 +999,14 @@ async function addMovie(formEl){
 
       // Uppdatera bara griden
       await refreshLibraryGrid();
-
-      // Visa liten tillagd-feedback
-      const box = document.getElementById("tmdb_results");
-      if (box){
-        const el = document.createElement("div");
-        el.className = "muted";
-        el.style.margin = "6px 0";
-        el.textContent = "Tillagd ✓";
-        box.prepend(el);
-        setTimeout(() => el.remove(), 900);
-      }
+      
+      showToast("Tillagd i samlingen ✓", "ok", 2400);
 
     } else {
-      alert("Kunde inte lägga till (HTTP " + res.status + ").");
+      showToast("Kunde inte lägga till (HTTP " + res.status + ").", "err", 3200);
     }
   } catch(e){
-    alert("Nätverksfel vid tillägg.");
+    showToast("Nätverksfel vid tillägg.", "err", 3200);
   }
   return false;
 }
@@ -1019,14 +1081,19 @@ async function refreshLibraryGrid(){
 }
 
 function openMovieModal(){
+  lockBodyScroll();
+
   const m = document.getElementById("movieModal");
   m.classList.add("open");
   m.setAttribute("aria-hidden", "false");
 }
+
 function closeMovieModal(){
   const m = document.getElementById("movieModal");
   m.classList.remove("open");
   m.setAttribute("aria-hidden", "true");
+
+  unlockBodyScroll();
 }
 
 async function showMovieDetails(movieRowId){
@@ -1083,7 +1150,6 @@ function wireTileClicks(){
   document.querySelectorAll(".grid .tile").forEach(tile => {
     tile.addEventListener("click", (e) => {
       if (e.target && e.target.closest && e.target.closest("form")) return;
-      if (e.target && e.target.closest && e.target.closest(".watched-btn")) return;
 
       const id = tile.dataset.id;
       if (id) showMovieDetails(id);
