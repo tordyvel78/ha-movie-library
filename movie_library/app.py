@@ -447,12 +447,6 @@ HTML = """
       cursor: pointer;
     }
     
-    {% if manage_mode %}
-    .grid .tile {
-      cursor: default;
-    }
-    {% endif %}
-    
   </style>
   
 </head>
@@ -465,17 +459,6 @@ HTML = """
     </div>
   
     <div class="right" style="display:flex; gap:10px; align-items:center;">
-      {% if manage_mode %}
-        <a class="linkbtn" href="./">Tillbaka</a>
-      {% else %}
-        <a class="iconbtn edit" href="manage" aria-label="Hantera samling" title="Hantera samling" style="text-align:center; text-decoration:none; display:flex; align-items:center; justify-content:center;">
-          ✎
-        </a>
-  
-        <button type="button" class="iconbtn" onclick="openAddModal()" aria-label="Lägg till film" title="Lägg till film">
-          +
-        </button>
-      {% endif %}
     </div>
   </div>  
   
@@ -578,6 +561,24 @@ HTML = """
           <div id="mm_overview" style="line-height:1.45;"></div>
   
           <div id="mm_genres" class="muted" style="margin-top:10px;"></div>
+          
+          <div style="margin-top:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+          
+            <label style="display:flex; align-items:center; gap:6px; font-weight:600;">
+              <input type="checkbox" id="mm_watched">
+              Markera som sett
+            </label>
+          
+            <button id="mm_delete"
+                    style="margin-left:auto; padding:6px 10px; font-size:13px; border-radius:8px;
+                           border:1px solid rgba(255,0,0,.3);
+                           background:#2a1215;
+                           color:#ff8b8b;
+                           cursor:pointer;">
+              Ta bort
+            </button>
+          
+          </div>
         </div>
       </div>
     </div>
@@ -630,13 +631,6 @@ HTML = """
           {% if m[5] is not none %}
             <div class="rating">★ {{ "%.1f"|format(m[5]) }}</div>
           {% endif %}
-          {% if manage_mode %}
-            <button class="watched-btn"
-                    onclick="toggleWatched({{m[0]}}, this); event.stopPropagation();"
-                    title="Markera som sett">
-              👁
-            </button>
-          {% endif %}
         </div>
   
         <div class="title">{{m[1]}}</div>
@@ -644,15 +638,6 @@ HTML = """
           <span class="badge">{{m[2]}}</span>
           <span class="muted">{{m[3] or ""}}</span>
         </div>
-        
-        {% if manage_mode %}
-          <form onsubmit="return deleteMovie(this);"
-                method="post"
-                action="delete/{{m[0]}}"
-                style="margin-top:8px;">
-            <button type="submit" class="danger">Ta bort</button>
-          </form>
-        {% endif %}
                
       </div>
     {% endfor %}
@@ -704,7 +689,43 @@ async function tmdbSearch() {
   `).join("");
 }
 
+document.addEventListener("DOMContentLoaded", () => {
+  const cb = document.getElementById("mm_watched");
+  if (!cb) return;
 
+  cb.addEventListener("change", async () => {
+    if (!window._currentMovieId) return;
+
+    await fetch(`toggle_watched/${window._currentMovieId}`, {
+      method: "POST"
+    });
+
+    await refreshLibraryGrid();
+  });
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("mm_delete");
+  if (!btn) return;
+
+  btn.addEventListener("click", async () => {
+    if (!window._currentMovieId) return;
+
+    const ok = confirm("Ta bort filmen?");
+    if (!ok) return;
+
+    const res = await fetch(`delete/${window._currentMovieId}`, {
+      method: "POST"
+    });
+
+    if (res.ok){
+      closeMovieModal();
+      await refreshLibraryGrid();
+    } else {
+      alert("Kunde inte ta bort.");
+    }
+  });
+});
 
 async function addFromTmdb(id) {
 
@@ -762,24 +783,6 @@ function wireEnterToSearch() {
 }
 document.addEventListener("DOMContentLoaded", wireEnterToSearch);
 
-async function deleteMovie(formEl) {
-  const ok = confirm("Ta bort filmen?");
-  if (!ok) return false;
-
-  try {
-    const res = await fetch(formEl.action, { method: "POST" });
-    if (res.ok) {
-      // Ladda om nuvarande sida (med rätt ingress-prefix)
-      await refreshLibraryGrid();
-    } else {
-      alert("Kunde inte ta bort (HTTP " + res.status + ").");
-    }
-  } catch (e) {
-    alert("Nätverksfel vid borttagning.");
-  }
-  return false; // stoppa normal form-submit/redirect
-}
-
 function norm(s){
   return (s || "")
     .toString()
@@ -830,6 +833,7 @@ function filterLibrary(){
   if (!q.trim()){
     tiles.forEach(t => { t.style.display = ""; t.style.order = ""; });
     hint.style.display = "none";
+    applyHideWatched();
     return;
   }
 
@@ -856,6 +860,8 @@ function filterLibrary(){
 
   hint.style.display = "";
   hint.textContent = `${shown} träff${shown===1?"":"ar"} i samlingen`;
+  
+  applyHideWatched();
 }
 
 function wireLibrarySearch(){
@@ -952,7 +958,7 @@ function escapeHtml(s){
     .replaceAll("'","&#39;");
 }
 
-function tileHtml(m, manageMode){
+function tileHtml(m){
   const id = m.id;
   const title = m.title || "";
   const year = m.year ?? "";
@@ -978,11 +984,6 @@ function tileHtml(m, manageMode){
           : `<div class="poster placeholder"></div>`
         }
         ${vote != null ? `<div class="rating">★ ${vote.toFixed(1)}</div>` : ``}
-        ${manageMode ? `
-          <button class="watched-btn"
-                  onclick="toggleWatched(${id}, this); event.stopPropagation();"
-                  title="Markera som sett">👁</button>
-        ` : ``}
       </div>
 
       <div class="title">${escapeHtml(title)}</div>
@@ -991,11 +992,6 @@ function tileHtml(m, manageMode){
         <span class="muted">${escapeHtml(year)}</span>
       </div>
 
-      ${manageMode ? `
-        <form method="post" action="delete/${id}" onsubmit="return confirm('Ta bort?');">
-          <button class="danger" type="submit">Ta bort</button>
-        </form>
-      ` : ``}
     </div>
   `;
 }
@@ -1004,9 +1000,6 @@ async function refreshLibraryGrid(){
   const curGrid = document.querySelector(".grid");
   if (!curGrid) return;
 
-  // manage_mode finns redan i templaten som Jinja-boolean
-  const manageMode = {{ 'true' if manage_mode else 'false' }};
-
   const res = await fetch("api/movies", { cache: "no-store" });
   if (!res.ok) return;
 
@@ -1014,18 +1007,14 @@ async function refreshLibraryGrid(){
   const movies = Array.isArray(data.movies) ? data.movies : [];
 
   // Bygg HTML i minnet och byt i ett svep
-  curGrid.innerHTML = movies.map(m => tileHtml(m, manageMode)).join("");
+  curGrid.innerHTML = movies.map(m => tileHtml(m)).join("");
 
   // Re-wire tile klick (öppna modal) + behåll din filter/sort om du vill
   wireTileClicks();
 
-  // Om du använder sorteringen som sätter order: kör om den efter refresh
-  if (typeof sortGridTiles === "function") sortGridTiles();
-
   // Om du använder filterLibrary() (sök i samlingen): applicera igen
   if (typeof filterLibrary === "function") filterLibrary();
   
-  applyWatchedFilter();
   applyHideWatched();
 }
 
@@ -1041,6 +1030,7 @@ function closeMovieModal(){
 }
 
 async function showMovieDetails(movieRowId){
+  window._currentMovieId = movieRowId;
   openMovieModal();
 
   // reset UI
@@ -1063,6 +1053,10 @@ async function showMovieDetails(movieRowId){
   }
 
   document.getElementById("mm_title").textContent = data.title || "Film";
+  const checkbox = document.getElementById("mm_watched");
+  if (checkbox){
+    checkbox.checked = (data.watched === 1);
+  }
 
   const bits = [];
   if (data.year) bits.push(data.year);
@@ -1085,23 +1079,7 @@ async function showMovieDetails(movieRowId){
   }
 }
 
-async function toggleWatched(id, btn) {
-  await fetch(`toggle_watched/${id}`, {
-    method: "POST"
-  });
-
-  const tile = btn.closest(".tile");
-  const current = tile.dataset.watched === "1" ? "1" : "0";
-  const next = current === "1" ? "0" : "1";
-
-  tile.dataset.watched = next;
-  applyHideWatched();
-}
-
 function wireTileClicks(){
-  const manageMode = {{ 'true' if manage_mode else 'false' }};
-  if (manageMode) return;  // ⬅ stoppa all tile-click i manage
-
   document.querySelectorAll(".grid .tile").forEach(tile => {
     tile.addEventListener("click", (e) => {
       if (e.target && e.target.closest && e.target.closest("form")) return;
@@ -1250,6 +1228,10 @@ document.addEventListener("keydown", (e) => {
     const cb = document.getElementById("hide_watched");
     if (!cb) return;
   
+    // ✅ Om vi söker: dölj inget här. Sökningen bestämmer vad som syns.
+    const q = (document.getElementById("lib_search")?.value || "").trim();
+    if (q) return;
+  
     const hide = cb.checked;
   
     document.querySelectorAll(".grid .tile").forEach(tile => {
@@ -1385,8 +1367,7 @@ def home():
         error=None,
         prefill_title=None,
         prefill_year=None,
-        prefill_format="Blu-ray",
-        manage_mode=False
+        prefill_format="Blu-ray"
     )
 
 @app.route("/add", methods=["POST"])
@@ -1506,31 +1487,19 @@ def tmdb_movie(movie_id: int):
     year = date.split("-")[0] if date else ""
     return jsonify({"title": title, "year": year})
 
-@app.route("/manage")
-def manage():
-    return render_template_string(
-        HTML,
-        movies=get_all_movies(),
-        error=None,
-        prefill_title=None,
-        prefill_year=None,
-        prefill_format="Blu-ray",
-        manage_mode=True
-    )
-
 @app.route("/movie/<int:movie_row_id>")
 def movie_details(movie_row_id: int):
     # Hämta från DB
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT id, title, format, year, poster_file, vote, tmdb_id FROM movies WHERE id=?", (movie_row_id,))
+    c.execute("SELECT id, title, format, year, poster_file, vote, tmdb_id, watched FROM movies WHERE id=?", (movie_row_id,))
     row = c.fetchone()
     conn.close()
 
     if not row:
         return jsonify({"error": "Not found"}), 404
 
-    _id, title, fmt, year, poster_file, vote, tmdb_id = row
+    _id, title, fmt, year, poster_file, vote, tmdb_id, watched = row
 
     payload = {
         "id": _id,
@@ -1544,6 +1513,7 @@ def movie_details(movie_row_id: int):
         "runtime": None,
         "release_date": None,
         "genres": [],
+        "watched": watched,
     }
 
     # Om vi har tmdb_id: hämta extra info från TMDB (cacha)
